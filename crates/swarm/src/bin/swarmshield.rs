@@ -374,7 +374,13 @@ fn update_loop(fw: Arc<Mutex<Firewall<RecordingPolicySink, MemoryAudit>>>, paid:
                             true,
                         );
                         added += 1;
-                    } else if let Some((shape, fix)) = k.split_once('=') {
+                    } else if let Some(ch) = k.strip_prefix("ch") {
+                        // Federated fix — channel-anonymous, zero identifying
+                        // info: `ch{idx}=drop|block|rl:N` → shared map.
+                        let (idx, fix) = match ch.split_once('=') {
+                            Some((i, f)) => (i, f),
+                            None => continue,
+                        };
                         let kind = match fix {
                             "drop" => MitigationKind::Drop,
                             "block" => MitigationKind::Block,
@@ -383,8 +389,10 @@ fn update_loop(fw: Arc<Mutex<Firewall<RecordingPolicySink, MemoryAudit>>>, paid:
                             },
                             _ => continue,
                         };
-                        g.playbook.insert(shape.to_string(), kind);
-                        added += 1;
+                        if let Ok(i) = idx.parse::<u8>() {
+                            g.shared.insert(i, kind);
+                            added += 1;
+                        }
                     }
                 }
             }
@@ -394,11 +402,18 @@ fn update_loop(fw: Arc<Mutex<Firewall<RecordingPolicySink, MemoryAudit>>>, paid:
         }
         // Push (paid only): local playbook discoveries → the herd.
         if paid {
+            // Push channel-anonymous fixes only — the playbook key is
+            // `{subject}:{channel}`; the subject holds an IP, so only
+            // the channel index + fix goes upstream. Zero identifiers.
             let entries: Vec<String> = {
                 let g = fw.lock().unwrap();
                 g.playbook
                     .iter()
-                    .map(|(k, v)| format!("{k}={}", fix_str(v)))
+                    .filter_map(|(k, v)| {
+                        k.rsplit(':').next().and_then(|c| {
+                            c.parse::<u8>().ok().map(|i| format!("ch{i}={}", fix_str(v)))
+                        })
+                    })
                     .collect()
             };
             for e in entries {

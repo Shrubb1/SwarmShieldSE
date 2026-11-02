@@ -190,6 +190,10 @@ pub struct Firewall<P: PolicySink, A: AuditLog> {
     /// Survives restarts via `FirewallSnapshot` — instant replay on
     /// re-attack without re-searching.
     pub playbook: HashMap<String, MitigationKind>,
+    /// Federated fixes: channel-indexed fixes learned by OTHER clients
+    /// (zero-knowledge — the channel carries no identifying info).
+    /// Consulted between the local playbook and a fresh search.
+    pub shared: HashMap<u8, MitigationKind>,
 }
 
 impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
@@ -226,6 +230,7 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
             identity: IdentityMap::default(),
             search: HashMap::new(),
             playbook: HashMap::new(),
+            shared: HashMap::new(),
         }
     }
 
@@ -549,6 +554,10 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
         let key = format!("{:?}:{}", subject, dom);
         if let Some(kind) = self.playbook.get(&key).cloned() {
             return self.emit_with(subject, Some(kind), format!("playbook fix: {key}"), now_ms);
+        }
+        // Federated fix — the herd learned this anomaly channel's fix.
+        if let Some(kind) = self.shared.get(&(dom as u8)).cloned() {
+            return self.emit_with(subject, Some(kind), format!("herd fix: ch{dom}"), now_ms);
         }
         // First anomaly for this shape → register the search + emit
         // candidate 0.
