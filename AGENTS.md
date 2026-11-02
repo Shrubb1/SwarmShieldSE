@@ -135,8 +135,17 @@
   encoder aux blob. `FORMAT_VERSION` = 6 (15-channel detectors).
 - Rules ALWAYS carry `expires_ms`; `RuleTable::sweep` reaps on every
   event. `has_subject` prevents rule stacking per subject.
-- Firewall `remediate` attribution = top_src_share ≥ `attribution_min_share`
-  → `RuleSubject::Ip`, else `Global`.
+- Firewall `remediate` attribution ladder (TNR-preserving):
+  top_src_share ≥ `attribution_min_share` → `RuleSubject::Ip`;
+  bare-shaped trigger (method==0 || path_len==0) → `RuleSubject::Pattern`
+  (`ShapePattern{method,proto,dst_port,max_path_len}` — scans/floods get
+  scoped, legit HTTP never matches); a live Pattern rule + non-bare
+  trigger → skip (no Global stacking); window has top_src →
+  `Ip(top_src)` (narrow misattribution beats Global collateral);
+  else `Global` (last resort). Same bare→Pattern gate applies to the
+  `slow_hits` drift path. `RuleSubject` is serialized — enum growth
+  requires `FORMAT_VERSION` bump only if snapshots cross the wire
+  (ProxyRule maps Pattern → `"pattern:mXpYdZxW"`).
 
 ## Integration hooks
 

@@ -280,7 +280,7 @@ fn down_spike_recovery_is_informational() {
 
 /// A diffuse anomaly (no dominant source) produces a Global rule.
 #[test]
-fn diffuse_anomaly_yields_global_rule() {
+fn diffuse_anomaly_yields_scoped_rule() {
     let mut fw = fw_with(FirewallPolicy {
         anomaly_threshold: 2,
         action_ladder: vec![MitigationKind::Drop],
@@ -294,6 +294,7 @@ fn diffuse_anomaly_yields_global_rule() {
     }
     // Header-bomb from 20 distinct IPs: 1 event each, 50KB headers.
     // Anomalous (mean_header + uniq + new_src all move) but no src > 5%.
+    // Bare-shaped (no method/path) → scoped Pattern, not Global.
     for w in 10..14 {
         for i in 0..20u8 {
             fw.inspect(&mk_ev(w * TICK + i as u64 * 50, ip(100 + i), 500, 50_000))
@@ -304,7 +305,11 @@ fn diffuse_anomaly_yields_global_rule() {
 
     let applied = fw.sink_mut().applied.clone();
     assert!(!applied.is_empty(), "expected a rule");
-    assert_eq!(applied[0].subject, RuleSubject::Global);
+    assert!(
+        matches!(applied[0].subject, RuleSubject::Pattern(_)),
+        "bare diffuse attack should scope by shape, got {:?}",
+        applied[0].subject
+    );
 }
 
 /// The `/jobs/{id}/network` audit contract: every record lands as a JSONL

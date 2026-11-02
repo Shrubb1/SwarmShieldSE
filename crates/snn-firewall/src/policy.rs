@@ -36,6 +36,22 @@ pub enum RuleSubject {
     Tenant(String),
     /// Applies to all traffic — last resort when no single source dominates.
     Global,
+    /// Shape-scoped: matches events sharing the attack's transport
+    /// signature (method/proto/dst_port/pathlessness). Used for diffuse
+    /// attacks so legitimate traffic with a different shape survives —
+    /// this is the TNR-preserving middle rung between Ip and Global.
+    Pattern(ShapePattern),
+}
+
+/// The transport "shape" a Pattern rule matches — exact equality on all
+/// fields. `max_path_len` isolates path-less traffic (scans, SYN floods,
+/// raw probes) from requests that carry a real path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ShapePattern {
+    pub method: u8,
+    pub proto: u8,
+    pub dst_port: u16,
+    pub max_path_len: u16,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -154,6 +170,12 @@ impl RuleTable {
                 RuleSubject::Ip(ip) => *ip == ev.src_ip,
                 RuleSubject::Tenant(t) => *t == ev.tenant,
                 RuleSubject::Global => true,
+                RuleSubject::Pattern(s) => {
+                    ev.meta.method == s.method
+                        && ev.meta.proto == s.proto
+                        && ev.meta.dst_port == s.dst_port
+                        && ev.meta.path_len <= s.max_path_len
+                }
             };
             if !matches {
                 continue;

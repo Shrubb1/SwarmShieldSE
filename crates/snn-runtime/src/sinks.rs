@@ -44,6 +44,10 @@ impl From<&MitigationRule> for ProxyRule {
             RuleSubject::Ip(ip) => format!("ip:{ip}"),
             RuleSubject::Tenant(t) => format!("tenant:{t}"),
             RuleSubject::Global => "global".into(),
+            RuleSubject::Pattern(s) => format!(
+                "pattern:m{}p{}d{}x{}",
+                s.method, s.proto, s.dst_port, s.max_path_len
+            ),
         };
         Self {
             id: r.id,

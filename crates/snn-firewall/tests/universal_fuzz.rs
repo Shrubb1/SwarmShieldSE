@@ -199,3 +199,120 @@ fn run(allow_listed: bool) -> ([usize; 3], f64, usize, usize) {
     assert!(v.is_ok(), "engine died under fuzz");
     (verdicts, legit_allow, rules.len(), f.playbook.len())
 }
+
+/// TNR preservation: a distributed *bare* flood (scans/SYN-style — no
+/// method, no path) must get a shape-scoped Pattern rule, NOT Global —
+/// legitimate HTTP requests with a different shape keep flowing.
+#[test]
+fn pattern_scopes_diffuse_flood() {
+    use snn_firewall::RuleSubject;
+    let mut f = fw();
+    let mut ts = 1_000u64;
+    let legit_ip = |n: u8| IpAddr::V4(Ipv4Addr::new(10, 0, 0, n));
+    let legit = |ip: IpAddr| ConnEvent {
+        ts_ms: 0,
+        tenant: "t-a".into(),
+        src_ip: ip,
+        payload_bytes: 300,
+        header_bytes: 400,
+        meta: EventMeta {
+            method: 1,
+            proto: 6,
+            dst_port: 9101,
+            path_len: 12,
+            ua_id: (ip.to_string().len() % 40) as u16,
+            ..Default::default()
+        },
+        payload: None,
+    };
+    // Warm baseline: a POOL of 30 legit users, jittery sparse pacing —
+    // each stays far below the persistence threshold that flags C2s.
+    for i in 0..150u64 {
+        let mut ev = legit(legit_ip((i % 30 + 1) as u8));
+        ev.ts_ms = ts;
+        ts += 60 + (i * 37) % 160;
+        let _ = f.inspect(&ev);
+    }
+    // Distributed bare flood — rotating IPs (no dominant src), no
+    // method, no path — the shape that used to force Global. Legit
+    // traffic interleaves, as it would in reality.
+    for i in 0..400 {
+        ts += 10;
+        if i > 200 && i % 80 == (i / 80) % 80 {
+            let mut lv = legit(legit_ip((i % 30 + 1) as u8));
+            lv.ts_ms = ts;
+            let _ = f.inspect(&lv);
+        }
+        let ev = ConnEvent {
+            ts_ms: ts,
+            tenant: "t-a".into(),
+            src_ip: IpAddr::V4(Ipv4Addr::new(66, (i % 200) as u8, (i % 100) as u8, 1)),
+            payload_bytes: 64,
+            header_bytes: 0,
+            meta: EventMeta {
+                method: 0,
+                proto: 6,
+                dst_port: 9101,
+                path_len: 0,
+                ..Default::default()
+            },
+            payload: None,
+        };
+        let _ = f.inspect(&ev);
+    }
+    // A Pattern rule should exist — not Global.
+    let has_pattern = f
+        .active_rules()
+        .iter()
+        .any(|r| matches!(r.subject, RuleSubject::Pattern(_)));
+    let has_global = f
+        .active_rules()
+        .iter()
+        .any(|r| matches!(r.subject, RuleSubject::Global));
+    eprintln!(
+        "rules: {:?}",
+        f.active_rules()
+            .iter()
+            .map(|r| format!("{:?} <- {}", r.subject, r.reason))
+            .collect::<Vec<_>>()
+    );
+    assert!(has_pattern, "bare flood should emit a shape-scoped rule");
+    assert!(!has_global, "no Global collateral needed for shaped attack");
+
+    // TNR: a FRESH legit HTTP user (method=1, path>0, no history) must
+    // still be Allowed — Pattern rules can't touch its shape.
+    let mut ev = legit(legit_ip(99));
+    ts += 50;
+    ev.ts_ms = ts;
+    let v = f.inspect(&ev).unwrap();
+    assert_eq!(v, Verdict::Allow, "legit HTTP collateral-denied: {v:?}");
+
+    // TPR: bare probes (the attack shape) must be mitigated — a burst
+    // exhausts any rate-limit bucket, so not all can pass.
+    let mut mitigated = 0;
+    for _ in 0..80 {
+        ts += 5;
+        let hostile = ConnEvent {
+            ts_ms: ts,
+            tenant: "t-a".into(),
+            src_ip: IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9)),
+            payload_bytes: 64,
+            header_bytes: 0,
+            meta: EventMeta {
+                method: 0,
+                proto: 6,
+                dst_port: 9101,
+                path_len: 0,
+                ..Default::default()
+            },
+            payload: None,
+        };
+        if !matches!(f.inspect(&hostile).unwrap(), Verdict::Allow) {
+            mitigated += 1;
+        }
+    }
+    assert!(
+        mitigated > 50,
+        "bare probes leaked through pattern rule ({mitigated}/80 mitigated)"
+    );
+}

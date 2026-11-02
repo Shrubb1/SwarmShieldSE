@@ -68,7 +68,7 @@ fn tarpit_hold(s: &mut TcpStream, host: &str) {
     }
 }
 
-fn handle(mut client: TcpStream, fw: &Arc<Mutex<Firewall<RecordingPolicySink, MemoryAudit>>>) {
+fn handle(client: TcpStream, fw: &Arc<Mutex<Firewall<RecordingPolicySink, MemoryAudit>>>) {
     let src = client
         .peer_addr()
         .map(|a| a.ip())

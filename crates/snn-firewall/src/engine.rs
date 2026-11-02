@@ -28,7 +28,9 @@ use crate::enhance::Signatures;
 use crate::enhance::{Beacons, MetaWindow, SlowTick, SourceProfiles, StaticPolicy};
 use crate::event::{ConnEvent, FeatureVector, FeatureWindow, CHANNELS};
 use crate::identity::IdentityMap;
-use crate::policy::{MitigationKind, MitigationRule, PolicySink, RuleSubject, RuleTable, Verdict};
+use crate::policy::{
+    MitigationKind, MitigationRule, PolicySink, RuleSubject, RuleTable, ShapePattern, Verdict,
+};
 use crate::scout::Scout;
 use crate::sequence::SequenceTracker;
 
@@ -393,12 +395,23 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
                 ));
                 return Ok(false);
             }
-            return self.remediate(fv, &det, ev.ts_ms);
+            return self.remediate(fv, &det, ev);
         }
-        // Low-and-slow: gradual drift the delta encoder misses → Global.
+        // Low-and-slow: gradual drift the delta encoder misses → scope
+        // by shape when the attack is bare; Global only as last resort.
         if !slow_hits.is_empty() {
+            let subject = if ev.meta.method == 0 || ev.meta.path_len == 0 {
+                RuleSubject::Pattern(ShapePattern {
+                    method: ev.meta.method,
+                    proto: ev.meta.proto,
+                    dst_port: ev.meta.dst_port,
+                    max_path_len: ev.meta.path_len,
+                })
+            } else {
+                RuleSubject::Global
+            };
             return self.emit(
-                RuleSubject::Global,
+                subject,
                 format!("slow-tick drift on channels {slow_hits:?}"),
                 ev.ts_ms,
             );
@@ -410,8 +423,10 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
 
     /// Rule generation: attribute → pick ladder rung → enforce + push + audit.
     /// Returns `true` when a new rule was inserted.
-    fn remediate(&mut self, fv: &FeatureVector, det: &Detection, now_ms: u64) -> io::Result<bool> {
-        // Attribution: dominant source gets the rule; diffuse gets Global.
+    fn remediate(&mut self, fv: &FeatureVector, det: &Detection, ev: &ConnEvent) -> io::Result<bool> {
+        let now_ms = ev.ts_ms;
+        // Attribution: dominant source gets the rule; diffuse gets a
+        // shape-scoped Pattern (TNR-preserving) or Global as last resort.
         // req_rate is events/sec — convert back to a count for the share.
         let total_events = (fv.values[0] * self.policy.tick_ms as f32 / 1000.0).max(f32::EPSILON);
         let subject = match fv.top_src {
@@ -420,7 +435,36 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
             {
                 RuleSubject::Ip(ip)
             }
-            _ => RuleSubject::Global,
+            _ => {
+                // Bare-shaped attack (scans, SYN floods, raw probes —
+                // no method and/or no path) can be scoped by transport
+                // shape: legitimate HTTP requests never match it.
+                if ev.meta.method == 0 || ev.meta.path_len == 0 {
+                    RuleSubject::Pattern(ShapePattern {
+                        method: ev.meta.method,
+                        proto: ev.meta.proto,
+                        dst_port: ev.meta.dst_port,
+                        max_path_len: ev.meta.path_len,
+                    })
+                } else if self
+                    .active_rules()
+                    .iter()
+                    .any(|r| matches!(r.subject, RuleSubject::Pattern(_)))
+                {
+                    // A non-bare event triggered this anomaly — we can't
+                    // scope it — but a live Pattern rule already covers
+                    // the attack's shape. A new Global adds only
+                    // collateral (TNR loss) — skip it.
+                    return Ok(false);
+                } else if let Some((ip, _)) = fv.top_src {
+                    // No shape to scope by — narrow to the window's
+                    // dominant source rather than Global collateral.
+                    // Wrong-IP risk beats wrong-everyone certainty.
+                    RuleSubject::Ip(ip)
+                } else {
+                    RuleSubject::Global
+                }
+            }
         };
 
         if self.policy.search.enabled {
