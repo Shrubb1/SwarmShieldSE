@@ -202,6 +202,7 @@ fn handle(
                     AuditKind::Mitigation { rule } => {
                         println!("[ !! ] {src} {}", explain(&rule.reason));
                         println!("       → action: {}", action_words(&rule.kind));
+                        toast(&src, explain(&rule.reason));
                     }
                     AuditKind::Alert { reason } => {
                         println!("[warn] {src} (trusted) {}", explain(reason));
@@ -221,6 +222,21 @@ fn action_words(kind: &MitigationKind) -> &'static str {
         MitigationKind::Drop => "blocked",
         MitigationKind::Block => "blocked hard",
     }
+}
+
+/// OS toast on real blocks — zero-dep WinRT toast via PowerShell.
+/// Fire-and-forget; silently no-ops where powershell isn't available.
+fn toast(ip: &str, what: &str) {
+    let xml = format!(
+        "<toast><visual><binding template='ToastGeneric'><text>SwarmShield blocked an attack</text><text>{ip} {what}</text></binding></visual></toast>"
+    );
+    let ps = format!(
+        "[Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime]|Out-Null;$x=New-Object Windows.Data.Xml.Dom.XmlDocument;$x.LoadXml('{}');[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('SwarmShieldSE').Show((New-Object Windows.UI.Notifications.ToastNotification $x))",
+        xml.replace('\'', "''")
+    );
+    let _ = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &ps])
+        .spawn();
 }
 
 /// First-run disclosure — the user sees exactly what the software does
@@ -336,17 +352,38 @@ fn main() {
                 continue;
             }
         };
-        let listen_port = tp.parse().unwrap_or(9101);
+        let listen_port = lp
+            .rsplit(':')
+            .next()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(9101);
         println!("  • guarding {lp} → {tp}");
         let fw = Arc::clone(&fw);
         let prev = Arc::clone(&audit_prev);
         std::thread::spawn(move || {
-            let listener = TcpListener::bind(&lp).expect("bind failed");
-            for s in listener.incoming().flatten() {
-                let fw = Arc::clone(&fw);
-                let prev = Arc::clone(&prev);
-                let tp = tp.clone();
-                std::thread::spawn(move || handle(s, &tp, listen_port, quiet, &fw, &prev));
+            // Network-change resilience: the listen socket can die when
+            // the OS shifts networks (sleep/Wi-Fi/VPN). Rebind forever —
+            // never take the service down with it.
+            loop {
+                let listener = match TcpListener::bind(&lp) {
+                    Ok(l) => l,
+                    Err(e) => {
+                        println!("[rebind] {lp} can't bind ({e}) — retry in 5s");
+                        std::thread::sleep(Duration::from_secs(5));
+                        continue;
+                    }
+                };
+                for s in listener.incoming() {
+                    let s = match s {
+                        Ok(s) => s,
+                        Err(_) => break, // listener poisoned → rebind
+                    };
+                    let fw = Arc::clone(&fw);
+                    let prev = Arc::clone(&prev);
+                    let tp = tp.clone();
+                    std::thread::spawn(move || handle(s, &tp, listen_port, quiet, &fw, &prev));
+                }
+                println!("[rebind] {lp} listener dropped — rebinding");
             }
         });
     }

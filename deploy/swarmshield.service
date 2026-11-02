@@ -1,0 +1,18 @@
+[Unit]
+Description=SwarmShieldSE behavioral firewall
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust rules: listen:target pairs (same as CLI args)
+ExecStart=/opt/swarmshield/swarmshield 9101:8081 -q
+Restart=always
+RestartSec=5
+# RAM-only learning — nothing to persist
+DynamicUser=yes
+ProtectSystem=strict
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
