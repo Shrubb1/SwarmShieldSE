@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SwarmShieldSE — evasion gauntlet</title>
+<style>
+  body{margin:0;background:#0b0e14;color:#e6edf3;font-family:system-ui;overflow:hidden}
+  #hud{position:fixed;top:14px;left:16px;z-index:5}
+  #hud h1{margin:0;font-size:1.1rem;color:#3fb950}
+  #hud a{color:#58a6ff;font-size:.8rem}
+  #feed{position:fixed;bottom:14px;left:16px;right:16px;height:100px;overflow:hidden;
+    font-family:ui-monospace,Consolas,monospace;font-size:.78rem;color:#8b949e;z-index:5;
+    background:#0d1117cc;border:1px solid #21262d;border-radius:8px;padding:8px}
+  #feed div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lbl{position:absolute;color:#8b949e;font-size:.72rem;pointer-events:none;
+    transform:translate(-50%,-50%);white-space:nowrap}
+</style>
+</head>
+<body>
+<div id="hud"><h1>🛡 the evasion gauntlet — every attack wears a random disguise</h1>
+<a href="/">← back</a> · replaying real fuzz output: 83.8% caught, leet-speak evades</div>
+<div id="feed"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const scene=new THREE.Scene();scene.fog=new THREE.Fog(0x0b0e14,30,90);
+const cam=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,200);
+cam.position.set(0,8,24);cam.lookAt(0,0,0);
+const r=new THREE.WebGLRenderer({antialias:true});r.setSize(innerWidth,innerHeight);
+r.setClearColor(0x0b0e14);document.body.appendChild(r.domElement);
+scene.add(new THREE.AmbientLight(0x404060));
+const pl=new THREE.PointLight(0x58a6ff,1.2,60);pl.position.set(0,12,10);scene.add(pl);
+
+// stages: raw attack → disguise tumbler → signature gate → caught/evaded
+const DIS={x:-4,c:0xd29922,name:"random disguise"},GATE={x:4,c:0x58a6ff,name:"signature gate"};
+const CAUGHT={x:16,y:3.2,c:0x3fb950,name:"caught · 84%"};
+const EVADED={x:16,y:-3.2,c:0xf85149,name:"evaded → behavioral layer watches"};
+for(const s of[DIS,GATE]){const g=new THREE.Mesh(new THREE.TorusGeometry(1.5,.12,12,40),
+  new THREE.MeshBasicMaterial({color:s.c}));g.position.set(s.x,0,0);g.rotation.y=Math.PI/2;scene.add(g);}
+for(const e of[CAUGHT,EVADED]){const m=new THREE.Mesh(new THREE.BoxGeometry(2.4,2.4,2.4),
+  new THREE.MeshStandardMaterial({color:e.c,emissive:e.c,emissiveIntensity:.3}));
+  m.position.set(e.x,e.y,0);scene.add(m);}
+
+const labels=[];function lbl(t,x,y){const d=document.createElement('div');d.className='lbl';
+d.textContent=t;labels.push({d,x,y});document.body.appendChild(d);}
+lbl("attack",-16,2.4);lbl(DIS.name,DIS.x,2.4);lbl(GATE.name,GATE.x,2.4);
+lbl(CAUGHT.name,CAUGHT.x,CAUGHT.y+2);lbl(EVADED.name,EVADED.x,EVADED.y-2);
+function place(d,x,y){const v=new THREE.Vector3(x,y,0);v.project(cam);
+d.style.left=((v.x+1)/2*innerWidth)+'px';d.style.top=((-v.y+1)/2*innerHeight)+'px';}
+
+// REAL disguises from the fuzz run — and the ones that got through
+const CAUGHT_TXT=["1/**/union/**/select","%55%4e%49%4f%4e%20%53%45%4c%45%43%54",
+  "x\\0../etc/passwd\\0x","'%20or%20'1'%3d'1","UnIoN+sElEcT","${jndi:rmi://x/}",
+  "; cat /etc/shadow","<sCrIpT>alert(1)</sCrIpT>","uNiOn+SeLeCt+UsEr"];
+const EVADED_TXT=["${jnd1:ldap://x/}","cmd.3x3 /c wh0am1","1gn0r3%20pr3v10us",
+  "1+un10n+s3l3ct","IGN0r3%20PREV1OUs%20INSTruCt1ONS"];
+const feed=document.getElementById('feed');
+function say(t,c){const d=document.createElement('div');d.textContent=t;d.style.color=c;
+feed.appendChild(d);while(feed.children.length>6)feed.removeChild(feed.firstChild);}
+
+const pkts=[];
+function spawn(){
+  const evade=Math.random()<0.162; // real measured evasion rate
+  const txt=evade?EVADED_TXT[~~(Math.random()*EVADED_TXT.length)]
+                 :CAUGHT_TXT[~~(Math.random()*CAUGHT_TXT.length)];
+  const m=new THREE.Mesh(new THREE.BoxGeometry(.5,.5,.5),
+    new THREE.MeshBasicMaterial({color:0x8b949e}));
+  m.position.set(-18,(Math.random()-.5)*1.6,(Math.random()-.5)*1.6);
+  scene.add(m);pkts.push({m,evade,txt,phase:0});
+}
+let t=0;
+function anim(){requestAnimationFrame(anim);t+=.016;
+  if(Math.random()<.05)spawn();
+  for(let i=pkts.length-1;i>=0;i--){const p=pkts[i];
+    if(p.phase===0){ // fly to disguise tumbler
+      p.m.position.x+=.16;
+      if(p.m.position.x>=DIS.x){p.phase=1;p.tumble=0;}
+    }else if(p.phase===1){ // tumble: disguising
+      p.tumble++;p.m.rotation.x+=.25;p.m.rotation.y+=.2;
+      p.m.position.y+=Math.sin(p.tumble*.15)*.06;
+      if(p.tumble>26){p.phase=2;
+        p.m.material.color.setHex(p.evade?0xd29922:0x58a6ff);}
+    }else if(p.phase===2){ // through the gate
+      p.m.position.x+=.16;
+      if(p.m.position.x>=GATE.x+1){p.phase=3;
+        if(p.evade){say(`[ !! ] "${p.txt}" → slipped the signatures`,"#f85149");
+          setTimeout(()=>say(`        → behavioral layer still watching it`,"#d29922"),350);
+        }else{say(`[ ok ] "${p.txt}" → caught`,"#3fb950");}}
+    }else{ // exit path
+      const tgt=p.evade?EVADED:CAUGHT;
+      p.m.position.y+=Math.sign(tgt.y-p.m.position.y)*.07;
+      p.m.position.x+=p.evade?.06:.15; // evaded crawls — behavioral layer slows it
+      if(p.m.position.x>20||(p.evade&&p.m.position.x>17.5)){
+        if(p.evade){p.m.position.x=17.5;p.m.rotation.y+=.12;}
+        else{scene.remove(p.m);pkts.splice(i,1);}
+        if(p.evade&&p.m.rotation.y>40){scene.remove(p.m);pkts.splice(i,1);}}
+    }}
+  labels.forEach(l=>place(l.d,l.x,l.y));r.render(scene,cam);}
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();r.setSize(innerWidth,innerHeight);});
+anim();
+</script>
+</body>
+</html>

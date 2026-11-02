@@ -301,6 +301,10 @@ fn handle(mut s: std::net::TcpStream, limits: &Mutex<HashMap<std::net::IpAddr, (
         if serve_file(&mut s, "viz.html") {
             return;
         }
+    } else if path == "/viz2" || path == "/viz2.html" {
+        if serve_file(&mut s, "viz2.html") {
+            return;
+        }
     } else if path.starts_with("/download/") {
         if serve_file(&mut s, &path) {
             return;
