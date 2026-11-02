@@ -57,11 +57,11 @@
 <!-- CENTERPIECE: free public scanner, flanked by live stats + story -->
 <div class="hero3">
   <div class="side-card">
-    <h4>Live from the engine</h4>
-    <div class="stat"><span>test suite</span><b>45 green</b></div>
-    <div class="stat"><span>attack detection</span><b>~95% TPR</b></div>
-    <div class="stat"><span>real sqlmap + tamper</span><b>defeated</b></div>
-    <div class="stat"><span>malformed protocol fuzz</span><b>300/300</b></div>
+    <h4>Live results</h4>
+    <div class="stat"><span>sqlmap overnight (2h scan)</span><b>0 injectable</b></div>
+    <div class="stat"><span>requests denied</span><b>4,639</b></div>
+    <div class="stat"><span>attack detection</span><b>~95%</b></div>
+    <div class="stat"><span>fuzz survived</span><b>300/300</b></div>
     <div class="stat"><span>throughput</span><b>~27k ev/s</b></div>
   </div>
 
@@ -104,13 +104,18 @@
   <div class="card">
     <h3>What it can do</h3>
     <ul>
-      <li>Stops floods, port scans, and slow-burn attacks</li>
-      <li>Catches SQLi, XSS, path traversal, injection — even obfuscated</li>
-      <li>Predicts attack sequences <em>before</em> the exploit lands</li>
-      <li>Follows attackers across IP changes by fingerprint</li>
-      <li>Blocks secrets/API keys from leaking out</li>
-      <li>Traps attackers in a tarpit — wastes <em>their</em> time, not yours</li>
+      <li>Stops the fast stuff — floods, scanners, hammering bots</li>
+      <li>Catches the sneaky stuff — hackers sneaking code into your
+          requests, even when they disguise it</li>
+      <li>Sees an attack coming before the real hit lands</li>
+      <li>Recognizes an attacker even when they switch IPs</li>
+      <li>Blocks your passwords & API keys from leaking out</li>
+      <li>Traps attackers in a fake slow lane — wastes <em>their</em> time</li>
     </ul>
+    <p class="muted" style="margin-bottom:0">Real result: we ran
+    <b>sqlmap</b> — the tool hackers actually use — at it for 2 hours
+    overnight. It found <b>nothing injectable</b> across 4,639 attempts
+    and gave up, recommending its user try a WAF instead.</p>
   </div>
 </section>
 </div>
