@@ -35,11 +35,26 @@ compute is time they can't spend attacking anything else.
 ## Quickstart
 
 ```bash
-cargo build --release --bin http_shield
-./http_shield 127.0.0.1:8081          # listens; XFF/CF-Connecting-IP aware
-curl http://127.0.0.1:8081/           # 200 OK
+cargo build --release
+
+# consumer runner — plain-English feed, consent gate, tiers
+./swarmshield 9101:8081               # protect any TCP service
+./swarmshield --token SS-SE-XXXX 9101:8081   # paid tier unlocks
+
+# per-protocol fronts
+./http_shield 127.0.0.1:8081          # HTTP + tarpit; XFF/CF-IP aware
+./universal_gateway 0.0.0.0:9101 127.0.0.1:3306   # any TCP, L4 tarpit
+./sys_proxy 127.0.0.1:9090            # CONNECT proxy — OS-wide coverage
+./scan_server 0.0.0.0:9200            # free dropbox scanner (site)
+./license_server 127.0.0.1:9100       # licensing + herd-immunity feed
+./swarm_svc                           # Windows SCM service (elevated install)
 sqlmap -u "http://127.0.0.1:8081/?id=1" --batch   # watch it give up
 ```
+
+Tiers: **free** = single service, drop-only; **paid** (`--token` +
+`SWARM_LICENSE_URL`) = tarpit deception, multi-service, search+playbook,
+15-min herd-immunity sync (`ch{idx}=fix` — channel-anonymous, zero
+identifiers leave the machine).
 
 Replay a Wireshark/tcpdump capture through the engine:
 
@@ -62,10 +77,16 @@ events ──► Scout (silent profiling) ──► FeatureWindow ──► Dete
 - `snn-core` — deterministic spiking net (LIF + Izhikevich, CSR, delays, rayon)
 - `snn-encode` / `snn-learn` — delta encoding, STDP
 - `snn-mesh` — detector + checkpoint stores
-- `SwarmShieldSE` — the engine: windows, detector, rules, scout, tracker,
-  fingerprints, signatures, search, playbook, snapshots
-- `swarm` — `http_shield` (real HTTP front + tarpit), worker/orchestrator mesh
+- `snn-firewall` — the engine: windows, detector, rules, scout, tracker,
+  fingerprints, signatures (incl. credential-leak + prompt-injection),
+  Pattern-scoped attribution, watchlist, search, playbook, snapshots
+- `swarm` — fronts: `swarmshield` (consumer runner), `http_shield`,
+  `universal_gateway`, `sys_proxy`, `scan_server`, `license_server`,
+  `swarm_svc` (SCM); `crash.rs` privacy-preserving panic telemetry;
+  worker/orchestrator mesh
 - `snn-wasm` — wasm32 JSON façade
+- `deploy/` — systemd + launchd service templates · `install.bat` —
+  no-admin Startup install · `site/` — landing + signup + scanner pages
 
 ## License
 
