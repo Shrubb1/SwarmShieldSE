@@ -12,112 +12,73 @@
     font-family:ui-monospace,Consolas,monospace;font-size:.8rem;color:#8b949e;z-index:5;
     background:#0d1117cc;border:1px solid #21262d;border-radius:8px;padding:8px}
   #feed div{white-space:nowrap}
-  .lbl{position:absolute;color:#8b949e;font-size:.72rem;pointer-events:none;
-    transform:translate(-50%,-50%);white-space:nowrap}
 </style>
 </head>
 <body>
 <div id="hud"><h1>🛡 SwarmShieldSE — inside the engine</h1>
 <a href="/">← back</a> · simulated traffic, real pipeline order</div>
 <div id="feed"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<canvas id="cv"></canvas>
 <script>
-const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x0b0e14, 30, 90);
-const cam = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .1, 200);
-cam.position.set(0, 9, 26); cam.lookAt(0, 1, 0);
-const r = new THREE.WebGLRenderer({antialias:true});
-r.setSize(innerWidth, innerHeight); r.setClearColor(0x0b0e14);
-document.body.appendChild(r.domElement);
-scene.add(new THREE.AmbientLight(0x404060));
-const pl = new THREE.PointLight(0x58a6ff, 1.2, 60); pl.position.set(0,12,10); scene.add(pl);
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+function fit(){cv.width=innerWidth;cv.height=innerHeight;}
+fit();addEventListener('resize',fit);
+const W=()=>cv.width,H=()=>cv.height,CY=.46;
 
-const STAGES = [
-  {x:-14, name:"internet",  c:0x8b949e},
-  {x:-7,  name:"scout",    c:0xd29922},
-  {x:0,   name:"window+SNN brain", c:0x58a6ff},
-  {x:7,   name:"rules",    c:0xd2a8ff},
-];
-// two exits
-const OK   = {x:16, y:3,  c:0x3fb950, name:"your app"};
-const TRAP = {x:16, y:-3, c:0xf85149, name:"tarpit"};
+const STAGES=[{x:.14,c:'#8b949e',n:'internet'},{x:.30,c:'#d29922',n:'scout'},
+  {x:.47,c:'#58a6ff',n:'window+SNN brain'},{x:.64,c:'#d2a8ff',n:'rules'}];
+const OK={x:.87,y:CY-.11,c:'#3fb950',n:'your app'},TRAP={x:.87,y:CY+.11,c:'#f85149',n:'tarpit'};
 
-// gates
-for (const s of STAGES) {
-  const g = new THREE.Mesh(
-    new THREE.TorusGeometry(1.6,.12,12,40),
-    new THREE.MeshBasicMaterial({color:s.c}));
-  g.position.set(s.x,0,0); g.rotation.y = Math.PI/2; scene.add(g);
-}
-// brain blob (the SNN) — spiky sphere pulsing
-const brain = new THREE.Mesh(
-  new THREE.IcosahedronGeometry(1.5,1),
-  new THREE.MeshStandardMaterial({color:0x1f6feb,emissive:0x1f6feb,emissiveIntensity:.4,flatShading:true}));
-brain.position.set(0,0,0); scene.add(brain);
-// exit boxes
-for (const e of [OK,TRAP]) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(2.2,2.2,2.2),
-    new THREE.MeshStandardMaterial({color:e.c,emissive:e.c,emissiveIntensity:.3}));
-  m.position.set(e.x,e.y,0); scene.add(m);
-}
-// labels via 2D overlay
-const labels = [];
-function lbl(txt,x,y){const d=document.createElement('div');d.className='lbl';d.textContent=txt;labels.push({d,x,y});document.body.appendChild(d);}
-STAGES.forEach(s=>lbl(s.name,s.x,2.4)); lbl(OK.name,OK.x,OK.y+2); lbl(TRAP.name,TRAP.x,TRAP.y-2);
-function place(d,x,y){const v=new THREE.Vector3(x,y,0);v.project(cam);d.style.left=((v.x+1)/2*innerWidth)+'px';d.style.top=((-v.y+1)/2*innerHeight)+'px';}
-
-// packets
-const pkts=[];
 const HOSTILES=["is checking in on a schedule — like malware phoning home",
   "sent a flood — too many requests too fast","suspicious payload — sqlmap-style",
   "tried to sneak in malicious code","is probing for open doors"];
 const GOODS=["looks normal, let them through","regular traffic — all good"];
 const feed=document.getElementById('feed');
-function say(txt,c){const d=document.createElement('div');d.textContent=txt;d.style.color=c;feed.appendChild(d);while(feed.children.length>6)feed.removeChild(feed.firstChild);}
+function say(t,c){const d=document.createElement('div');d.textContent=t;d.style.color=c;
+  feed.appendChild(d);while(feed.children.length>6)feed.removeChild(feed.firstChild);}
 
+const pkts=[];
 function spawn(hostile){
-  const geo = new THREE.SphereGeometry(.22,8,8);
-  const col = hostile?0xf85149:0x3fb950;
-  const m = new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:col}));
-  m.position.set(-20, (Math.random()-.5)*2.4, (Math.random()-.5)*2);
-  scene.add(m);
-  pkts.push({m,hostile,phase:"in",t:0});
+  pkts.push({x:.02,y:CY+(Math.random()-.5)*.14,hostile,phase:'in'});
 }
+function ring(x,y,r,col,lw){ctx.strokeStyle=col;ctx.lineWidth=lw;
+  ctx.beginPath();ctx.arc(x*W(),y*H(),r,0,7);ctx.stroke();}
+function box(x,y,s,c,g){ctx.fillStyle=c;ctx.shadowColor=c;ctx.shadowBlur=g;
+  ctx.fillRect(x*W()-s/2,y*H()-s/2,s,s);ctx.shadowBlur=0;}
+function label(t,x,y,c){ctx.fillStyle=c||'#8b949e';ctx.font='12px system-ui';
+  ctx.textAlign='center';ctx.fillText(t,x*W(),y*H());}
 
 let t=0;
-function anim(){
-  requestAnimationFrame(anim); t+=.016;
-  brain.rotation.y+=.02;
-  brain.material.emissiveIntensity=.3+Math.abs(Math.sin(t*3))*.5; // SNN "thinking" pulse
-  if(Math.random()<.03) spawn(Math.random()<.18); // ~18% hostile mix
-  for(let i=pkts.length-1;i>=0;i--){
-    const p=pkts[i];
-    if(p.phase==="in"){
-      p.m.position.x+=.14;
-      if(p.m.position.x>=6 && p.phase==="in"){
-        // decision point: hostile → tarpit path, good → app path
-        p.phase="exit";
+function anim(){requestAnimationFrame(anim);t+=.016;
+  ctx.fillStyle='#0b0e14';ctx.fillRect(0,0,W(),H());
+  STAGES.forEach(s=>{ring(s.x,CY,40,s.c,3);label(s.n,s.x,CY-.08);});
+  box(OK.x,OK.y,58,OK.c,16);box(TRAP.x,TRAP.y,58,TRAP.c,16);
+  label(OK.n,OK.x,OK.y-.08,'#3fb950');label(TRAP.n,TRAP.x,TRAP.y+.10,'#f85149');
+  // SNN brain pulse at the brain stage
+  const bx=STAGES[2].x;
+  ring(bx,CY,26+Math.sin(t*3)*7,'rgba(88,166,255,.4)',1);
+  ctx.fillStyle='#1f6feb';ctx.beginPath();ctx.arc(bx*W(),CY*H(),10,0,7);ctx.fill();
+
+  if(Math.random()<.03)spawn(Math.random()<.18);
+  for(let i=pkts.length-1;i>=0;i--){const p=pkts[i];
+    if(p.phase==='in'){p.x+=.007;
+      if(p.x>=.60){p.phase='exit';
         const ip=`${~~(Math.random()*254)+1}.${~~(Math.random()*255)}.${~~(Math.random()*255)}.${~~(Math.random()*255)}`;
-        if(p.hostile){
-          say(`[ !! ] ${ip} ${HOSTILES[~~(Math.random()*HOSTILES.length)]}`,"#f85149");
-          setTimeout(()=>say(`[TRAP] ${ip} → stuck in the tar — wasting their time`,"#d29922"),400);
-        }else{
-          say(`[ ok ] ${ip} ${GOODS[~~(Math.random()*GOODS.length)]}`,"#3fb950");
-        }
-      }
-    }else{
-      const tgt=p.hostile?TRAP:OK;
-      p.m.position.y += Math.sign(tgt.y-p.m.position.y)*.06;
-      p.m.position.x += p.hostile?.045:.14;   // tarpit = slow crawl
-      if(p.hostile && p.m.position.x>14){p.m.position.x=14;p.m.rotation.y+=.1; // circling the pit
-        p.m.material.color.setHex(0x994540);}
-      if(p.m.position.x>21||(p.hostile&&p.t++>400)){scene.remove(p.m);pkts.splice(i,1);}
-    }
+        if(p.hostile){say(`[ !! ] ${ip} ${HOSTILES[~~(Math.random()*HOSTILES.length)]}`,'#f85149');
+          setTimeout(()=>say(`[TRAP] ${ip} → stuck in the tar — wasting their time`,'#d29922'),400);
+        }else{say(`[ ok ] ${ip} ${GOODS[~~(Math.random()*GOODS.length)]}`,'#3fb950');}}
+    }else{const tgt=p.hostile?TRAP:OK;
+      p.y+=Math.sign(tgt.y-p.y)*.004;
+      p.x+=p.hostile?.0018:.006; // tarpit = slow crawl
+      if(p.hostile&&p.x>TRAP.x-.02){p.x=TRAP.x-.02;p.rot=(p.rot||0)+.1;
+        if(p.rot>40){pkts.splice(i,1);continue;}}
+      if(p.x>.98){pkts.splice(i,1);continue;}}
+    ctx.save();ctx.translate(p.x*W(),p.y*H());ctx.rotate(p.rot||0);
+    const c=p.hostile?(p.phase==='exit'?'#994540':'#f85149'):'#3fb950';
+    ctx.fillStyle=c;ctx.shadowColor=c;ctx.shadowBlur=9;
+    ctx.beginPath();ctx.arc(0,0,5,0,7);ctx.fill();ctx.restore();ctx.shadowBlur=0;
   }
-  labels.forEach(l=>place(l.d,l.x,l.y));
-  r.render(scene,cam);
 }
-addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();r.setSize(innerWidth,innerHeight);});
 anim();
 </script>
 </body>
