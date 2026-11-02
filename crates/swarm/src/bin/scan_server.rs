@@ -191,8 +191,18 @@ fn check_link(url: &str) -> String {
     } else {
         format!("⚠ notable — {}", flags.join("; "))
     };
+    // The bridge: flagged links get a one-click "pre-block this in the
+    // desktop app" cfg download — zero telemetry, just a blocklist file.
+    let cta = if flags.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<p><a href='/shieldcfg?host={host}' style='color:#3fb950'>\
+             → download SwarmShieldSE with this threat pre-blocked (.sscfg)</a></p>"
+        )
+    };
     format!(
-        "<div class='card'><h3>{url}</h3><p>host: {host} · {fetch_note}</p><p>{verdict}</p></div>"
+        "<div class='card'><h3>{url}</h3><p>host: {host} · {fetch_note}</p><p>{verdict}</p>{cta}</div>"
     )
 }
 
@@ -256,6 +266,17 @@ fn handle(mut s: std::net::TcpStream, limits: &Mutex<HashMap<std::net::IpAddr, (
     if path.starts_with("/link") {
         let url = path.split("url=").nth(1).unwrap_or("").replace("%3A", ":").replace("%2F", "/");
         let _ = write!(s, "{}", resp(&format!("{PAGE}{}", check_link(&url))));
+        return;
+    }
+    if path.starts_with("/shieldcfg") {
+        let host = path.split("host=").nth(1).unwrap_or("").trim().to_string();
+        let body = format!("# SwarmShieldSE pre-block config\nblock:{host}\n");
+        let _ = write!(
+            s,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=\"swarmshield.sscfg\"\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
         return;
     }
     if path.starts_with("/scan") {

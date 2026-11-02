@@ -399,6 +399,44 @@ fn fetch_blocklist(url: &str) -> std::io::Result<Vec<String>> {
         .collect())
 }
 
+/// Import `.sscfg` pre-block files (emitted by the web scanner's
+/// "download with this threat pre-blocked" link). `block:` lines take
+/// IPs or domains — domains resolve to IPs. Pure allowlist of denials;
+/// zero telemetry — it's just a file the user downloaded.
+fn import_sscfg(fw: &mut Firewall<RecordingPolicySink, MemoryAudit>) -> Vec<String> {
+    use std::net::ToSocketAddrs;
+    let mut dirs = vec![std::env::current_dir().unwrap_or_default()];
+    if let Ok(p) = std::env::var("USERPROFILE") {
+        dirs.push(std::path::PathBuf::from(format!("{p}\\Downloads")));
+    }
+    let mut loaded = vec![];
+    for dir in dirs {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for ent in rd.flatten() {
+            let p = ent.path();
+            if p.extension().map(|e| e == "sscfg").unwrap_or(false) {
+                if let Ok(txt) = std::fs::read_to_string(&p) {
+                    for line in txt.lines().map(str::trim) {
+                        if let Some(t) = line.strip_prefix("block:") {
+                            // Direct IP or resolve domain → insert denies.
+                            if let Ok(ip) = t.parse::<std::net::IpAddr>() {
+                                fw.static_policy.deny.insert(ip, true);
+                                loaded.push(t.to_string());
+                            } else if let Ok(mut addrs) = format!("{t}:80").to_socket_addrs() {
+                                if let Some(a) = addrs.next() {
+                                    fw.static_policy.deny.insert(a.ip(), true);
+                                    loaded.push(t.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    loaded
+}
+
 fn main() {
     if !consent() {
         return;
@@ -434,7 +472,15 @@ fn main() {
     }
     println!("  [-q for quiet mode: only show threats]");
     println!("=============================================================");
-    let fw = Arc::new(Mutex::new(firewall(tier)));
+    let mut fw_obj = firewall(tier);
+    let preblocked = import_sscfg(&mut fw_obj);
+    if !preblocked.is_empty() {
+        println!("  welcome back — already blocking what you scanned earlier:");
+        for t in &preblocked {
+            println!("   • {t}");
+        }
+    }
+    let fw = Arc::new(Mutex::new(fw_obj));
     update_loop(Arc::clone(&fw));
     let audit_prev = Arc::new(Mutex::new(0usize));
     for pair in pairs {
