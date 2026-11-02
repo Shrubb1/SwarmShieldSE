@@ -95,8 +95,11 @@ fn universal_bypass_fuzz() {
 fn run(allow_listed: bool) -> ([usize; 3], f64, usize, usize) {
     let mut f = fw();
     if allow_listed {
-        for n in 1..=5u8 {
-            f.static_policy.allow.insert(ip(n));
+        // Cover the whole legit pool (10.0.{1..8}.{1..254}).
+        for b in 1..=8u8 {
+            for c in 1..=254u8 {
+                f.static_policy.allow.insert(IpAddr::V4(Ipv4Addr::new(10, 0, b, c)));
+            }
         }
     }
     let mut rng = Xor64(0x9e3779b97f4a7c15);
@@ -122,8 +125,14 @@ fn run(allow_listed: bool) -> ([usize; 3], f64, usize, usize) {
             )),
             // rotating pool of 40
             1 | 2 => IpAddr::V4(Ipv4Addr::new(66, 6, (r % 40) as u8, 6)),
-            // stable normals
-            _ => IpAddr::V4(Ipv4Addr::new(10, 0, 0, ((i / 10) % 5 + 1) as u8)),
+            // legit users: a wide pool (~2000 IPs, ~20 events each) —
+            // realistic churn, not 5 IPs at botnet volume
+            _ => IpAddr::V4(Ipv4Addr::new(
+                10,
+                0,
+                ((r >> 8) % 8 + 1) as u8,
+                ((r >> 16) % 254 + 1) as u8,
+            )),
         };
         // pacing: burst, normal, or huge gap
         ts += match mode {

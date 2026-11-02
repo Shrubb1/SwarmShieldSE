@@ -16,6 +16,7 @@
 
 use std::collections::HashMap;
 use std::io;
+use std::net::IpAddr;
 
 use serde::{Deserialize, Serialize};
 use snn_io::Checkpoint;
@@ -154,6 +155,12 @@ pub struct Firewall<P: PolicySink, A: AuditLog> {
     next_rule_id: u64,
     /// Per-subject offense count + last-rule timestamp (cooldown).
     subjects: HashMap<RuleSubject, (u32, u64)>,
+    /// Ambiguous-attribution watchlist: an unattributed window's
+    /// dominant source is *watched*, not ruled — it graduates to a real
+    /// `Ip` rule only on repeat appearance. Hostile sources persist;
+    /// a legit top_src misattribution is a one-off. Map: ip →
+    /// (strikes, last_ms).
+    watch: HashMap<IpAddr, (u8, u64)>,
     /// Tenant attributed to the current window (last event seen).
     tenant: String,
     sample_seq: u64,
@@ -206,6 +213,7 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
             audit,
             next_rule_id: 1,
             subjects: HashMap::new(),
+            watch: HashMap::new(),
             tenant: String::new(),
             sample_seq: 0,
             static_policy: StaticPolicy::default(),
@@ -457,9 +465,13 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
                     // collateral (TNR loss) — skip it.
                     return Ok(false);
                 } else if let Some((ip, _)) = fv.top_src {
-                    // No shape to scope by — narrow to the window's
-                    // dominant source rather than Global collateral.
-                    // Wrong-IP risk beats wrong-everyone certainty.
+                    // No shape to scope by — ambiguous attribution.
+                    // Watch first: only a REPEAT top_src graduates to a
+                    // real Ip rule (60s window). A one-off dominant legit
+                    // source in a mixed window is never ruled.
+                    if !self.watch_graduate(ip, now_ms) {
+                        return Ok(false);
+                    }
                     RuleSubject::Ip(ip)
                 } else {
                     RuleSubject::Global
@@ -478,6 +490,25 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
             ),
             now_ms,
         )
+    }
+
+    /// Ambiguous-attribution gate: a top_src must appear dominant in
+    /// ≥2 unattributed anomalous windows (within 60s) before graduating
+    /// to a real Ip rule. Prunes stale entries; returns true when the
+    /// strike threshold is met.
+    fn watch_graduate(&mut self, ip: IpAddr, now_ms: u64) -> bool {
+        const WINDOW_MS: u64 = 60_000;
+        const STRIKES: u8 = 2;
+        self.watch.retain(|_, (_, last)| now_ms - *last < WINDOW_MS);
+        let e = self.watch.entry(ip).or_insert((0, now_ms));
+        e.0 = e.0.saturating_add(1);
+        e.1 = now_ms;
+        if e.0 >= STRIKES {
+            self.watch.remove(&ip);
+            true
+        } else {
+            false
+        }
     }
 
     /// Feedback-driven mitigation search: playbook hit → instant reuse;
