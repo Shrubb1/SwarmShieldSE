@@ -17,19 +17,88 @@ use snn_firewall::{
 };
 use snn_mesh::DetectorConfig;
 
-fn firewall() -> Firewall<RecordingPolicySink, MemoryAudit> {
+/// Feature tier from license: free = drop-only, single service, no
+/// tarpit deception; paid = the full stack.
+#[derive(Clone, Copy, PartialEq)]
+enum Tier {
+    Free,
+    Paid,
+}
+
+/// FNV-1a machine id — a binding convenience, not a crypto primitive.
+fn machine_id() -> u64 {
+    let s = format!(
+        "{}:{}",
+        std::env::var("COMPUTERNAME").unwrap_or_default(),
+        std::env::var("USERNAME").unwrap_or_default()
+    );
+    let mut h = 0xcbf29ce484222325u64;
+    for b in s.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h
+}
+
+/// Verify a token against the licensing API (`SWARM_LICENSE_URL`),
+/// falling back to the cached grant within a 48h offline grace.
+/// Returns the granted tier (Free when anything fails or no token).
+fn license_tier(token: Option<&str>) -> Tier {
+    let cache = std::env::var("USERPROFILE")
+        .map(|p| format!("{p}\\.swarmshield-license"))
+        .unwrap_or_else(|_| ".swarmshield-license".into());
+    let Some(token) = token else {
+        return Tier::Free;
+    };
+    if let Ok(url) = std::env::var("SWARM_LICENSE_URL") {
+        if !url.is_empty() {
+            let req = format!(
+                "{}/verify?token={}&mid={:x}",
+                url.trim_end_matches('/'),
+                token,
+                machine_id()
+            );
+            if let Ok(resp) = fetch_blocklist(&req) {
+                let status = resp.first().map(|s| s.trim()).unwrap_or("");
+                if status == "active" {
+                    let exp = now_ms() / 1000 + 7 * 24 * 3600 + 48 * 3600;
+                    let _ = std::fs::write(&cache, format!("{token}|{exp}|paid"));
+                    return Tier::Paid;
+                }
+            }
+        }
+    }
+    // Offline / unconfigured: honor a cached grant inside the grace.
+    if let Ok(data) = std::fs::read_to_string(&cache) {
+        let mut it = data.trim().split('|');
+        if it.next() == Some(token) {
+            if let Some(Ok(exp)) = it.next().map(|e| e.parse::<u64>()) {
+                if now_ms() / 1000 < exp {
+                    return Tier::Paid;
+                }
+            }
+        }
+    }
+    Tier::Free
+}
+
+fn firewall(tier: Tier) -> Firewall<RecordingPolicySink, MemoryAudit> {
     let mut p = FirewallPolicy {
         anomaly_threshold: 2,
-        action_ladder: vec![
-            MitigationKind::RateLimit { max_rps: 10.0 },
-            MitigationKind::Drop,
-            MitigationKind::Block,
-        ],
+        action_ladder: if tier == Tier::Paid {
+            vec![
+                MitigationKind::RateLimit { max_rps: 10.0 },
+                MitigationKind::Drop,
+                MitigationKind::Block,
+            ]
+        } else {
+            vec![MitigationKind::Drop] // free tier: block, no deception
+        },
         ttl_ms: 30_000,
         cooldown_ms: 0,
         ..Default::default()
     };
-    p.search.enabled = true;
+    p.search.enabled = tier == Tier::Paid; // playbook/search is paid
     Firewall::new(
         DetectorConfig {
             delta_threshold: 5.0,
@@ -113,6 +182,7 @@ fn handle(
     target: &str,
     listen_port: u16,
     quiet: bool,
+    tier: Tier,
     fw: &Arc<Mutex<Firewall<RecordingPolicySink, MemoryAudit>>>,
     audit_prev: &Arc<Mutex<usize>>,
 ) {
@@ -171,11 +241,17 @@ fn handle(
                     }
                     Verdict::RateLimited { .. } => {
                         say(false, src, "slow", "→ sending too fast — slowing them down");
-                        tarpit(&mut client, src);
+                        if tier == Tier::Paid {
+                            tarpit(&mut client, src);
+                        }
                         return;
                     }
                     Verdict::Denied { .. } => {
-                        tarpit(&mut client, src);
+                        if tier == Tier::Paid {
+                            tarpit(&mut client, src);
+                        } else {
+                            say(false, src, "??", "→ hostile — connection dropped");
+                        }
                         return;
                     }
                 }
@@ -327,19 +403,38 @@ fn main() {
     if !consent() {
         return;
     }
-    let pairs: Vec<String> = std::env::args().skip(1).filter(|a| a != "-q").collect();
-    let quiet = std::env::args().any(|a| a == "-q");
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let quiet = args.iter().any(|a| a == "-q");
+    let token = args
+        .iter()
+        .position(|a| a == "--token")
+        .and_then(|i| args.get(i + 1))
+        .map(String::as_str);
+    let tier = license_tier(token);
+    let mut pairs: Vec<String> = args
+        .iter()
+        .filter(|a| !a.starts_with('-') && !a.contains("SS-SE"))
+        .cloned()
+        .collect();
+    if tier == Tier::Free && pairs.len() > 1 {
+        println!("  free tier protects ONE service — using {}", pairs[0]);
+        pairs.truncate(1);
+    }
     let pairs = if pairs.is_empty() {
         vec!["9101:8081".to_string()]
     } else {
         pairs
     };
     println!("=============================================================");
-    println!("  SwarmShieldSE — live protection");
+    println!("  SwarmShieldSE — live protection   [{} tier]", if tier == Tier::Paid { "PAID" } else { "FREE" });
     println!("  watching {} service(s); this feed says what's happening", pairs.len());
+    if tier == Tier::Free {
+        println!("  free tier: blocks attacks · upgrade for tarpit deception,");
+        println!("  multi-service, adaptive search + playbook — --token SS-SE-XXXX");
+    }
     println!("  [-q for quiet mode: only show threats]");
     println!("=============================================================");
-    let fw = Arc::new(Mutex::new(firewall()));
+    let fw = Arc::new(Mutex::new(firewall(tier)));
     update_loop(Arc::clone(&fw));
     let audit_prev = Arc::new(Mutex::new(0usize));
     for pair in pairs {
@@ -381,7 +476,9 @@ fn main() {
                     let fw = Arc::clone(&fw);
                     let prev = Arc::clone(&prev);
                     let tp = tp.clone();
-                    std::thread::spawn(move || handle(s, &tp, listen_port, quiet, &fw, &prev));
+                    std::thread::spawn(move || {
+                        handle(s, &tp, listen_port, quiet, tier, &fw, &prev)
+                    });
                 }
                 println!("[rebind] {lp} listener dropped — rebinding");
             }
