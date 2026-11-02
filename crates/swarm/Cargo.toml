@@ -1,0 +1,21 @@
+[package]
+name = "swarm"
+description = "Live mesh nodes: swarm-worker (SNN+firewall enforcement) + swarm-orchestrator (control plane)"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json = "1"
+snn-mesh = { path = "../snn-mesh" }
+snn-firewall = { path = "../snn-firewall" }
+snn-runtime = { path = "../snn-runtime" }
+
+[[bin]]
+name = "swarm-worker"
+path = "src/bin/swarm_worker.rs"
+
+[[bin]]
+name = "swarm-orchestrator"
+path = "src/bin/swarm_orchestrator.rs"

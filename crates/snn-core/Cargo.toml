@@ -1,0 +1,11 @@
+[package]
+name = "snn-core"
+description = "Hybrid clock-driven spiking neural network simulation core"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+sprs.workspace = true
+rayon.workspace = true

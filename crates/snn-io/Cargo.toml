@@ -1,0 +1,15 @@
+[package]
+name = "snn-io"
+description = "Checkpoint serialization for SNN state (weights, membranes, traces, in-flight spikes)"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+bincode.workspace = true
+snn-core = { path = "../snn-core" }
+snn-learn = { path = "../snn-learn" }
+
+[dev-dependencies]
+snn-encode = { path = "../snn-encode" }

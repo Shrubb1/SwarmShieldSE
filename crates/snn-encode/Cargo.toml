@@ -1,0 +1,10 @@
+[package]
+name = "snn-encode"
+description = "Telemetry-to-spike-train encoders (Poisson rate, delta modulation)"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+rand.workspace = true

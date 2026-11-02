@@ -1,0 +1,19 @@
+[package]
+name = "snn-runtime"
+description = "Tenant/job-scoped orchestrator: per-job SNN detector + firewall, audit dirs, checkpoint fan-out"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json = "1"
+bincode.workspace = true
+snn-io = { path = "../snn-io" }
+snn-mesh = { path = "../snn-mesh" }
+snn-firewall = { path = "../snn-firewall" }
+ureq = { version = "3", features = ["json"], optional = true }
+
+[features]
+default = []
+http-sink = ["dep:ureq"]

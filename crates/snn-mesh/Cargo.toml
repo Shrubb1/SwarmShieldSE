@@ -1,0 +1,18 @@
+[package]
+name = "snn-mesh"
+description = "Mesh integration: SNN anomaly detector over the telemetry stream with checkpointed memory"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+snn-core = { path = "../snn-core" }
+snn-encode = { path = "../snn-encode" }
+snn-learn = { path = "../snn-learn" }
+snn-io = { path = "../snn-io" }
+postgres = { version = "0.19", optional = true }
+
+[features]
+default = []
+postgres-store = ["dep:postgres"]
