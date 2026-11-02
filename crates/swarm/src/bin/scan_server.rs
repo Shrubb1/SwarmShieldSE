@@ -297,6 +297,10 @@ fn handle(mut s: std::net::TcpStream, limits: &Mutex<HashMap<std::net::IpAddr, (
         if serve_file(&mut s, "signup.html") {
             return;
         }
+    } else if path == "/viz" || path == "/viz.html" {
+        if serve_file(&mut s, "viz.html") {
+            return;
+        }
     } else if path.starts_with("/download/") {
         if serve_file(&mut s, &path) {
             return;
