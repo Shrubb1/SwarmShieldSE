@@ -60,7 +60,10 @@ fn license_tier(token: Option<&str>) -> Tier {
             );
             if let Ok(resp) = fetch_blocklist(&req) {
                 let status = resp.first().map(|s| s.trim()).unwrap_or("");
-                if status == "active" {
+                if status == "active" || status == "grace" {
+                    if status == "grace" {
+                        println!("  ⚠ renewal pending — update payment to keep the full tier");
+                    }
                     let exp = now_ms() / 1000 + 7 * 24 * 3600 + 48 * 3600;
                     let _ = std::fs::write(&cache, format!("{token}|{exp}|paid"));
                     return Tier::Paid;
@@ -484,6 +487,32 @@ fn import_sscfg(fw: &mut Firewall<RecordingPolicySink, MemoryAudit>) -> Vec<Stri
     loaded
 }
 
+/// BYOF — bring-your-own-feed: drop a `rules.txt` next to the binary or
+/// in Downloads. One entry per line: `block:1.2.3.4`, `block:domain.tld`
+/// — power users/teams plug their own intel straight into the engine.
+fn import_custom(fw: &mut Firewall<RecordingPolicySink, MemoryAudit>) -> usize {
+    use std::net::ToSocketAddrs;
+    let mut n = 0;
+    for path in ["rules.txt", "custom_rules.txt"] {
+        if let Ok(txt) = std::fs::read_to_string(path) {
+            for line in txt.lines().map(str::trim) {
+                if let Some(t) = line.strip_prefix("block:") {
+                    if let Ok(ip) = t.parse::<std::net::IpAddr>() {
+                        fw.static_policy.deny.insert(ip, true);
+                        n += 1;
+                    } else if let Ok(mut a) = format!("{t}:80").to_socket_addrs() {
+                        if let Some(x) = a.next() {
+                            fw.static_policy.deny.insert(x.ip(), true);
+                            n += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    n
+}
+
 fn main() {
     if !consent() {
         return;
@@ -520,6 +549,10 @@ fn main() {
     println!("  [-q for quiet mode: only show threats]");
     println!("=============================================================");
     let mut fw_obj = firewall(tier);
+    let custom = import_custom(&mut fw_obj);
+    if custom > 0 {
+        println!("  loaded {custom} custom rules (rules.txt)");
+    }
     let preblocked = import_sscfg(&mut fw_obj);
     if !preblocked.is_empty() {
         println!("  welcome back — already blocking what you scanned earlier:");

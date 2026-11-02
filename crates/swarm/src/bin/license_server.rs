@@ -71,6 +71,8 @@ fn route(path: &str, db: &Mutex<Vec<Lic>>) -> String {
         let db = db.lock().unwrap();
         match db.iter().find(|l| l.token == tok && !l.revoked) {
             Some(l) if l.mid != 0 && l.mid != mid => "bound_elsewhere".into(),
+            // Failed-payment grace: expired <3d still active, flagged.
+            Some(l) if l.expires < now() && l.expires + 3 * 86400 >= now() => "grace".into(),
             Some(l) if l.expires < now() => "expired".into(),
             Some(_) => "active".into(),
             None => "invalid".into(),
@@ -87,6 +89,19 @@ fn route(path: &str, db: &Mutex<Vec<Lic>>) -> String {
                 }
                 save(&db);
                 "active".into()
+            }
+            None => "invalid".into(),
+        }
+    } else if path.starts_with("/transfer") {
+        // Seat transfer: rebind to a NEW machine (deactivates the old
+        // one) — same email required so strangers can't steal the seat.
+        let (tok, email, mid) = (get("token"), get("email"), mid_of(param(q, "mid")));
+        let mut db = db.lock().unwrap();
+        match db.iter_mut().find(|l| l.token == tok && !l.revoked && l.email == email) {
+            Some(l) => {
+                l.mid = mid;
+                save(&db);
+                "transferred".into()
             }
             None => "invalid".into(),
         }
