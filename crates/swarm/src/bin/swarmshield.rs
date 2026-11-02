@@ -514,6 +514,7 @@ fn import_custom(fw: &mut Firewall<RecordingPolicySink, MemoryAudit>) -> usize {
 }
 
 fn main() {
+    swarm::crash::install();
     if !consent() {
         return;
     }

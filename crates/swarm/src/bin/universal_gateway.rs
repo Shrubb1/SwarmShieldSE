@@ -146,6 +146,7 @@ fn handle(
 }
 
 fn main() {
+    swarm::crash::install();
     let mut args = std::env::args().skip(1);
     let listen = args
         .next()

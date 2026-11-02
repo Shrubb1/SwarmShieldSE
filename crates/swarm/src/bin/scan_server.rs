@@ -317,6 +317,7 @@ fn handle(mut s: std::net::TcpStream, limits: &Mutex<HashMap<std::net::IpAddr, (
 }
 
 fn main() {
+    swarm::crash::install();
     let listen = std::env::args().nth(1).unwrap_or_else(|| "0.0.0.0:9200".into());
     println!("scan server on {listen} — free dropbox, no login");
     let limits = Arc::new(Mutex::new(HashMap::new()));

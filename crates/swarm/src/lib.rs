@@ -9,6 +9,7 @@
 //! - [`proto`]: length-prefixed JSON frames, same serde types as JsonApi.
 
 pub mod control;
+pub mod crash;
 pub mod proto;
 pub mod worker;
 

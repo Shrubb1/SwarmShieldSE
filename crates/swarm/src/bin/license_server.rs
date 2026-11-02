@@ -161,8 +161,10 @@ fn route(path: &str, db: &Mutex<Vec<Lic>>) -> String {
     } else if path.starts_with("/feed") {
         let feed_path = std::env::var("SWARM_FEED_FILE").unwrap_or_else(|_| "feed.txt".into());
         std::fs::read_to_string(feed_path).unwrap_or_default()
+    } else if path.starts_with("/crash") {
+        "ok".into()
     } else {
-        "endpoints: /verify /activate /issue /forgot /report /feed".into()
+        "endpoints: /verify /activate /issue /forgot /report /feed /crash".into()
     }
 }
 
@@ -201,6 +203,7 @@ impl<'de> serde::Deserialize<'de> for Lic {
 }
 
 fn main() {
+    swarm::crash::install();
     let listen = std::env::args().nth(1).unwrap_or_else(|| "127.0.0.1:9100".into());
     let db = Mutex::new(load());
     eprintln!("[licenses] {listen} — {} entries loaded", db.lock().unwrap().len());
@@ -216,6 +219,16 @@ fn main() {
                     .next()
                     .and_then(|l| l.split_whitespace().nth(1))
                     .unwrap_or("/");
+                if path.starts_with("/crash") {
+                    // Anonymous crash ping — append the POST body only.
+                    if let Some(b) = req.split("\r\n\r\n").nth(1) {
+                        let _ = std::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open("crashes.log")
+                            .and_then(|mut f| std::io::Write::write_all(&mut f, b.as_bytes()));
+                    }
+                }
                 let body = route(path, db);
                 let _ = write!(
                     s,

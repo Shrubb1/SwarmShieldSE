@@ -214,6 +214,7 @@ fn handle(client: TcpStream, fw: &Arc<Mutex<Firewall<RecordingPolicySink, Memory
 }
 
 fn main() {
+    swarm::crash::install();
     let listen = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "127.0.0.1:9090".to_string());

@@ -244,5 +244,6 @@ fn service_main(_args: Vec<OsString>) {
 }
 
 fn main() -> windows_service::Result<()> {
+    swarm::crash::install();
     service_dispatcher::start("SwarmShieldSE", ffi_service_main)
 }

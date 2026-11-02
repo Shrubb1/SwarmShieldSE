@@ -151,6 +151,7 @@ fn handle(s: &mut TcpStream, fw: &mut Firewall<RecordingPolicySink, MemoryAudit>
 }
 
 fn main() {
+    swarm::crash::install();
     let addr = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "127.0.0.1:8081".to_string());
