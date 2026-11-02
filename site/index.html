@@ -2,53 +2,150 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SwarmShieldSE — behavioral SNN firewall</title>
+<title>SwarmShieldSE — the firewall that learns</title>
 <style>
-  body{font-family:system-ui;background:#0d1117;color:#e6edf3;margin:0;padding:40px;max-width:720px;margin:auto}
-  h1{color:#3fb950}
-  .card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:22px;margin:18px 0}
-  .btn{display:inline-block;background:#238636;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600}
-  .btn2{background:#21262d;border:1px solid #30363d}
-  code{background:#21262d;padding:2px 8px;border-radius:6px}
-  .muted{color:#8b949e;font-size:14px}
+  *{box-sizing:border-box}
+  body{font-family:system-ui,Segoe UI,sans-serif;background:#0b0e14;color:#e6edf3;margin:0}
+  .wrap{max-width:880px;margin:0 auto;padding:0 22px}
+  header{padding:56px 0 30px;text-align:center}
+  h1{font-size:2.6rem;margin:0;color:#3fb950}
+  .tag{color:#8b949e;font-size:1.15rem;margin-top:10px}
+  .hero-card{background:linear-gradient(135deg,#161b22,#0d1117);border:1px solid #30363d;
+    border-radius:16px;padding:30px;margin:26px 0;text-align:center;
+    box-shadow:0 8px 40px rgba(0,0,0,.5)}
+  .hero-card h2{margin-top:0;color:#58a6ff}
+  input[type=file],input[type=text],input[type=url]{width:100%;padding:12px;margin:8px 0;
+    border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3}
+  .btn{display:inline-block;background:#238636;color:#fff;padding:13px 26px;border-radius:9px;
+    text-decoration:none;font-weight:600;border:0;cursor:pointer;font-size:1rem}
+  .btn:hover{background:#2ea043}
+  .muted{color:#8b949e;font-size:.85rem}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:26px 0}
+  @media(max-width:640px){.grid{grid-template-columns:1fr}}
+  .card{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:22px}
+  .card h3{margin-top:0;color:#58a6ff}
+  .card ul{padding-left:18px;line-height:1.7}
+  .card li::marker{color:#3fb950}
+  .pill{display:inline-block;background:#1f6feb22;border:1px solid #1f6feb;color:#58a6ff;
+    border-radius:20px;padding:3px 12px;font-size:.8rem;margin:2px}
+  code{background:#21262d;padding:3px 8px;border-radius:6px;font-size:.9rem}
+  .free-badge{position:absolute;top:14px;right:16px;background:#238636;color:#fff;
+    font-size:.7rem;padding:4px 10px;border-radius:12px;font-weight:700}
+  .rel{position:relative}
+  section{margin:34px 0}
+  footer{color:#8b949e;text-align:center;padding:40px 0;font-size:.85rem;border-top:1px solid #21262d}
+  a{color:#58a6ff}
 </style>
 </head>
 <body>
-<h1>🛡 SwarmShieldSE</h1>
-<p>A behavioral firewall that learns your normal traffic and traps
-attackers — pure Rust, runs on your machine, your data never leaves it.</p>
+<div class="wrap">
 
-<div class="card">
-  <h3>Try it free — no account needed</h3>
-  <p class="muted">Single service · blocks attacks · plain-English feed.<br>
-  Upgrade later for tarpit deception, multi-service, adaptive playbooks.</p>
-  <a class="btn" href="/download/swarmshield-free.zip">Download Free</a>
+<header>
+  <h1>🛡 SwarmShieldSE</h1>
+  <p class="tag">A firewall that doesn't follow rules — it <em>learns</em> what's normal
+  and traps whatever isn't.</p>
+</header>
+
+<!-- CENTERPIECE: the free public scanner -->
+<div class="hero-card rel">
+  <span class="free-badge">FREE · NO LOGIN</span>
+  <h2>Suspicious file or link?</h2>
+  <p class="muted">Drop it here — instant verdict. Scanned in memory, nothing stored.</p>
+  <form method="post" action="/scan" enctype="multipart/form-data">
+    <input type="file" name="f" required>
+    <button class="btn" type="submit">Scan file</button>
+  </form>
+  <form method="get" action="/link" style="margin-top:12px">
+    <input type="url" name="url" placeholder="https://suspicious.link/file.exe" required>
+    <button class="btn" type="submit">Check link</button>
+  </form>
+  <p class="muted" style="margin-top:14px">in-memory scanning · 25MB cap · headers-only
+  link checks — we never execute or store anything</p>
 </div>
 
-<div class="card">
-  <h3>SwarmShield Pro — $X/week</h3>
-  <p class="muted">The full stack: L4 tarpit deception, multi-service guard,
-  adaptive mitigation search + serialized playbook, CONNECT proxy,
-  blocklist feed. Weekly billing, cancel anytime.</p>
-  <a class="btn" href="/signup">Get a License Token</a>
-</div>
+<!-- WHAT IT IS -->
+<section class="grid">
+  <div class="card">
+    <h3>What SwarmShieldSE is</h3>
+    <p>A tiny background guard that sits between the internet and your
+    machine. Instead of a static blocklist, it runs a spiking neural
+    network — a small artificial brain — that learns what <em>your</em>
+    normal traffic looks like and flags anything that deviates.</p>
+    <span class="pill">pure Rust</span>
+    <span class="pill">runs locally</span>
+    <span class="pill">no data collection</span>
+  </div>
+  <div class="card">
+    <h3>What it can do</h3>
+    <ul>
+      <li>Stops floods, port scans, and slow-burn attacks</li>
+      <li>Catches SQLi, XSS, path traversal, injection — even obfuscated</li>
+      <li>Predicts attack sequences <em>before</em> the exploit lands</li>
+      <li>Follows attackers across IP changes by fingerprint</li>
+      <li>Blocks secrets/API keys from leaking out</li>
+      <li>Traps attackers in a tarpit — wastes <em>their</em> time, not yours</li>
+    </ul>
+  </div>
+</section>
 
-<div class="card">
-  <h3>Free scanner — no login</h3>
-  <p class="muted">Drop a suspicious file or paste a link — instant
-  verdict. Scanned in memory, nothing stored.</p>
-  <a class="btn btn2" href="/scan">Open the Scanner</a>
-</div>
+<!-- WHAT IT MEANS -->
+<section class="grid">
+  <div class="card">
+    <h3>What having it means</h3>
+    <p>A terminal window you can glance at and actually understand —
+    "someone just tried to sneak in malicious code — slowed them down."
+    No security degree required. It runs in the background, learns in
+    memory only, and forgets everything when it stops.</p>
+  </div>
+  <div class="card">
+    <h3>How it protects everyone</h3>
+    <p>When one user's SwarmShield learns a new attack, the fix spreads
+    to every other paid client — anonymously. Only the <em>shape</em> of
+    the fix travels (a channel + action like <code>ch3=drop</code>), never
+    an IP, file, or byte of your traffic. One person bleeds; everyone
+    else immunizes.</p>
+    <span class="pill">zero-knowledge sync</span>
+    <span class="pill">herd immunity</span>
+  </div>
+</section>
 
-<div class="card">
-  <h3>Activate</h3>
-  <p class="muted">Run the app with your token:</p>
+<!-- TIERS -->
+<section class="grid">
+  <div class="card">
+    <h3>Free</h3>
+    <ul>
+      <li>Single service protection</li>
+      <li>Blocks attacks in real time</li>
+      <li>Plain-English live feed</li>
+      <li>Pulls shared protections</li>
+    </ul>
+    <a class="btn" href="/download/swarmshield-free.zip">Download Free</a>
+  </div>
+  <div class="card">
+    <h3>Pro — $X/week</h3>
+    <ul>
+      <li>Tarpit deception — wastes attacker time</li>
+      <li>Multi-service: web, game, DB, anything</li>
+      <li>Adaptive search + serialized playbooks</li>
+      <li>Herd-immunity push — your discoveries immunize all</li>
+      <li>OS proxy for system-wide app coverage</li>
+    </ul>
+    <a class="btn" href="/signup">Get a License Token</a>
+  </div>
+</section>
+
+<section class="card" style="text-align:center">
+  <h3 style="margin-top:0">Activate</h3>
   <code>swarmshield --token SS-SE-XXXXXXXXXXXXXXXX 9101:8081</code>
-  <p class="muted">One token = one machine. Re-issue anytime via
-  <a href="/forgot">forgot token</a>.</p>
-</div>
+  <p class="muted">one token = one machine · re-issue via <a href="/forgot">forgot token</a></p>
+</section>
 
-<p class="muted">Privacy: the engine learns in RAM only. The license check
-sends only your token — never traffic, logs, or history.</p>
+<footer>
+  <p>SwarmShieldSE — local-first behavioral firewall.<br>
+  The scanner processes uploads in memory only. The desktop app learns in RAM.
+  Nothing personal ever leaves your machine — only anonymous threat shapes.</p>
+</footer>
+
+</div>
 </body>
 </html>
