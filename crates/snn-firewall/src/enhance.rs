@@ -297,7 +297,9 @@ impl Signatures {
     /// collapsed) — `'or/**/1=1` and `%27%20or%201=1` can't slide past.
     pub fn scan(payload: &[u8]) -> u16 {
         let raw = String::from_utf8_lossy(&payload[..payload.len().min(4096)]).to_lowercase();
-        let norm = Self::normalize(&raw);
+        // Two passes: the second catches double-encoded payloads
+        // (%25%33 → after pass 1 → %3 → pass 2 decodes fully).
+        let norm = Self::normalize(&Self::normalize(&raw)).to_lowercase();
         let mut hits = 0u16;
         for (bit, pats) in Self::TABLE {
             if pats.iter().any(|p| raw.contains(p) || norm.contains(p)) {
@@ -315,10 +317,14 @@ impl Signatures {
         let mut i = 0;
         let mut last_ws = false;
         while i < b.len() {
-            // `/* */` → drop entirely (token splicing evasion)
+            // `/* */` → space (token splicing becomes `; cat`, not `;cat`)
             if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'*' {
                 if let Some(end) = s[i + 2..].find("*/") {
                     i += 2 + end + 2;
+                    if !last_ws {
+                        out.push(' ');
+                        last_ws = true;
+                    }
                     continue;
                 }
             }
@@ -332,6 +338,20 @@ impl Signatures {
                 out.push(h as char);
                 i += 3;
                 last_ws = false;
+                continue;
+            }
+            // `+` → space (query-string convention); `\x00` → drop
+            // (null-padding evasion).
+            if b[i] == b'+' {
+                if !last_ws {
+                    out.push(' ');
+                    last_ws = true;
+                }
+                i += 1;
+                continue;
+            }
+            if b[i] == 0 {
+                i += 1;
                 continue;
             }
             if b[i].is_ascii_whitespace() {
