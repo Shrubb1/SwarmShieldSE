@@ -210,6 +210,38 @@ fn resp(page: &str) -> String {
     format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}", page.len(), page)
 }
 
+/// Serve a file from `site/` (or SWARM_SITE_DIR) — makes the scanner
+/// server one-origin: `/`, `/signup`, `/download/*` + the scan endpoints.
+fn serve_file(s: &mut std::net::TcpStream, rel: &str) -> bool {
+    let base = std::env::var("SWARM_SITE_DIR").unwrap_or_else(|_| "site".into());
+    let rel = rel.trim_start_matches('/');
+    let rel = if rel.is_empty() { "index.html" } else { rel };
+    // no traversal
+    if rel.contains("..") {
+        return false;
+    }
+    let path = format!("{base}/{rel}");
+    let Ok(bytes) = std::fs::read(&path) else {
+        return false;
+    };
+    let ct = if rel.ends_with(".html") {
+        "text/html"
+    } else if rel.ends_with(".zip") {
+        "application/octet-stream"
+    } else if rel.ends_with(".css") {
+        "text/css"
+    } else {
+        "application/octet-stream"
+    };
+    let _ = write!(
+        s,
+        "HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nContent-Length: {}\r\n\r\n",
+        bytes.len()
+    );
+    let _ = s.write_all(&bytes);
+    true
+}
+
 fn handle(mut s: std::net::TcpStream, limits: &Mutex<HashMap<std::net::IpAddr, (u32, Instant)>>) {
     let ip = s.peer_addr().map(|a| a.ip()).unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
     // Rate limit: 10 scans/min/IP.
@@ -259,8 +291,20 @@ fn handle(mut s: std::net::TcpStream, limits: &Mutex<HashMap<std::net::IpAddr, (
     let req_line = String::from_utf8_lossy(&head[..header_end]).lines().next().unwrap_or("").to_string();
     let path = req_line.split_whitespace().nth(1).unwrap_or("/").to_string();
 
-    if req_line.starts_with("GET / ") || path == "/" {
-        let _ = write!(s, "{}", resp(PAGE));
+    // Site routing: real files first (index.html, signup.html,
+    // download/*), dropzone fallback when site/ isn't deployed.
+    if path == "/signup" || path == "/signup.html" {
+        if serve_file(&mut s, "signup.html") {
+            return;
+        }
+    } else if path.starts_with("/download/") {
+        if serve_file(&mut s, &path) {
+            return;
+        }
+    } else if req_line.starts_with("GET / ") || path == "/" {
+        if !serve_file(&mut s, "index.html") {
+            let _ = write!(s, "{}", resp(PAGE));
+        }
         return;
     }
     if path.starts_with("/link") {
