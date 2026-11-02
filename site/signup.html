@@ -16,9 +16,11 @@
 <div class="card">
   <p class="muted">Weekly subscription. Verify email → pay → your token
   is issued instantly and emailed to you.</p>
-  <form id="signup" method="post" action="/api/signup">
+  <!-- dev/demo: hits the license_server endpoints directly; in prod
+       these route through your backend which bills via Stripe first. -->
+  <form id="signup" method="get" action="http://127.0.0.1:9100/issue">
     <input name="email" type="email" placeholder="email" required>
-    <input name="phone" type="tel" placeholder="phone (verification)" required>
+    <input name="days" type="hidden" value="7">
     <button class="btn" type="submit">Continue to payment</button>
   </form>
   <p class="muted">After payment: token <code>SS-SE-XXXX…</code> →
@@ -26,7 +28,7 @@
 </div>
 <div class="card">
   <h3>Already paid? Lost your token?</h3>
-  <form method="post" action="/api/forgot">
+  <form method="get" action="http://127.0.0.1:9100/forgot">
     <input name="email" type="email" placeholder="email" required>
     <button class="btn" type="submit">Re-issue token</button>
   </form>
