@@ -435,6 +435,10 @@ impl Signatures {
             ],
         ),
         (
+            256, // industry-standard test files (EICAR)
+            &["eicar-standard-antivirus-test-file"],
+        ),
+        (
             64, // template / expression injection
             &[
                 "{{7*7}}", "${7*7}", "{{config", "{{self.", "eval(", "popen(",
