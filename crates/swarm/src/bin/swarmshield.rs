@@ -124,7 +124,9 @@ fn now_ms() -> u64 {
 
 /// Turn a rule's technical reason into a plain sentence anyone gets.
 fn explain(reason: &str) -> &'static str {
-    if reason.contains("beacon") {
+    if reason.contains("credential") || reason.contains("api-key") {
+        "tried to send a secret or API key out — blocked before it left"
+    } else if reason.contains("beacon") {
         "is checking in on a schedule — like malware phoning home"
     } else if reason.contains("kill-chain") {
         "is snooping around like an attacker setting up — stopped early"

@@ -408,6 +408,33 @@ impl Signatures {
             ],
         ),
         (
+            64, // credential/key material leaving the machine (agent guardrail)
+            &[
+                "sk-",
+                "ghp_",
+                "gho_",
+                "akia",
+                "xoxb-",
+                "aiza",
+                "-----begin",
+                "private key",
+                "api_key",
+                "apikey",
+                "bearer eyj",
+            ],
+        ),
+        (
+            128, // prompt-injection / agent-hijack markers
+            &[
+                "ignore previous instructions",
+                "ignore all previous",
+                "disregard previous",
+                "reveal your system prompt",
+                "developer mode enabled",
+                "dan mode",
+            ],
+        ),
+        (
             64, // template / expression injection
             &[
                 "{{7*7}}", "${7*7}", "{{config", "{{self.", "eval(", "popen(",

@@ -278,20 +278,30 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
         let beacon_hit = self.beacons.observe(ev);
         // Scout layer: silent profiling — suspicion feeds enforcement.
         let scout_hit = self.scout.observe(ev);
+        let mut ruled_now = false;
         // Kill-chain: classify stage; recon+enum inside the window →
         // the exploit is predicted → pre-empt BEFORE it lands.
-        let sig_hit = ev
+        let sig_mask = ev
             .payload
             .as_deref()
-            .map(|p| Signatures::scan(p) > 0)
-            .unwrap_or(false);
+            .map(|p| Signatures::scan(p))
+            .unwrap_or(0);
+        let sig_hit = sig_mask != 0;
+        // Agent guardrail: credential/key material leaving the machine
+        // gets an immediate rule — a secret should never exfiltrate.
+        if sig_mask & 64 != 0 {
+            ruled_now |= self.emit(
+                RuleSubject::Ip(ev.src_ip),
+                "credential/api-key material in outbound data".to_string(),
+                ev.ts_ms,
+            )?;
+        }
         let predicted = self.tracker.observe(ev, sig_hit);
         // Actor fingerprint: a flagged ja3+ua on a NEW source IP is a
         // rotation — flag it on event one, no re-learning needed.
         let actor_flagged = self.identity.observe(ev, sig_hit || predicted);
 
         // 4. Feature windowing; a finalized window gets scored.
-        let mut ruled_now = false;
         if let Some(fv) = self.window.observe(ev) {
             ruled_now = self.evaluate(&fv, ev)?;
         }
