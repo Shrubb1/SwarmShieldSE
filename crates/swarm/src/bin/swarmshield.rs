@@ -348,27 +348,72 @@ fn consent() -> bool {
     }
 }
 
-/// Optional privacy-first update: pull a shared blocklist file from a
-/// URL every N minutes — download-only, no telemetry uploads. Requires
-/// a real endpoint URL; skipped silently when unset/failed.
-fn update_loop(fw: Arc<Mutex<Firewall<RecordingPolicySink, MemoryAudit>>>) {
+/// Herd-immunity sync (paid tier): pull the shared feed AND push
+/// locally-learned playbook fixes upstream so other clients immunize
+/// too. Download + upload of *shape strings only* — never packet data.
+fn update_loop(fw: Arc<Mutex<Firewall<RecordingPolicySink, MemoryAudit>>>, paid: bool) {
     let url = match std::env::var("SWARM_FEED") {
         Ok(u) if !u.is_empty() => u,
-        _ => return, // no feed configured — skip entirely
+        _ => return,
     };
     std::thread::spawn(move || loop {
-        if let Ok(lines) = fetch_blocklist(&url) {
-            if !lines.is_empty() {
-                let n = lines.len();
-                let mut g = fw.lock().unwrap();
-                let added = g.import_blocklist(lines.into_iter());
-                if added > 0 {
-                    println!("[feed] {added}/{n} blocklist entries loaded");
+        // Pull: shared blocklist + playbook fixes.
+        if let Ok(lines) = fetch_blocklist(&format!("{}/feed", url.trim_end_matches('/'))) {
+            let mut g = fw.lock().unwrap();
+            let mut added = 0;
+            for line in &lines {
+                if let Some((k, v)) = line.split_once(':') {
+                    if k == "block" {
+                        let _ = g.static_policy.deny.insert(
+                            v.parse().unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)),
+                            true,
+                        );
+                        added += 1;
+                    } else if let Some((shape, fix)) = k.split_once('=') {
+                        let kind = match fix {
+                            "drop" => MitigationKind::Drop,
+                            "block" => MitigationKind::Block,
+                            s if s.starts_with("rl:") => MitigationKind::RateLimit {
+                                max_rps: s[3..].parse().unwrap_or(10.0),
+                            },
+                            _ => continue,
+                        };
+                        g.playbook.insert(shape.to_string(), kind);
+                        added += 1;
+                    }
                 }
             }
+            if added > 0 {
+                println!("[feed] pulled {added} shared protections");
+            }
         }
-        std::thread::sleep(Duration::from_secs(3600 * 4));
+        // Push (paid only): local playbook discoveries → the herd.
+        if paid {
+            let entries: Vec<String> = {
+                let g = fw.lock().unwrap();
+                g.playbook
+                    .iter()
+                    .map(|(k, v)| format!("{k}={}", fix_str(v)))
+                    .collect()
+            };
+            for e in entries {
+                let q = e.replace(':', "%3A").replace(';', "%3B");
+                let _ = fetch_blocklist(&format!(
+                    "{}/report?entry={q}",
+                    url.trim_end_matches('/')
+                ));
+            }
+        }
+        std::thread::sleep(Duration::from_secs(900)); // 15min cadence
     });
+}
+
+fn fix_str(k: &MitigationKind) -> String {
+    match k {
+        MitigationKind::Drop => "drop".into(),
+        MitigationKind::Block => "block".into(),
+        MitigationKind::RateLimit { max_rps } => format!("rl:{max_rps}"),
+    }
 }
 
 /// Minimal http:// GET → blocklist lines (one IP per line, `#` ok).
@@ -481,7 +526,7 @@ fn main() {
         }
     }
     let fw = Arc::new(Mutex::new(fw_obj));
-    update_loop(Arc::clone(&fw));
+    update_loop(Arc::clone(&fw), tier == Tier::Paid);
     let audit_prev = Arc::new(Mutex::new(0usize));
     for pair in pairs {
         let mut it = pair.split(':');

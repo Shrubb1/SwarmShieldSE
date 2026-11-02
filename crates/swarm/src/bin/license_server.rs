@@ -120,8 +120,34 @@ fn route(path: &str, db: &Mutex<Vec<Lic>>) -> String {
         });
         save(&db);
         tok
+    } else if path.starts_with("/report") {
+        // Herd-immunity push: a client's discovered playbook entry
+        // (shape_key:fix_kind) lands in the shared feed. Zero telemetry
+        // — the entry is just a shape string + a mitigation kind.
+        let entry = get("entry")
+            .replace("%3A", ":")
+            .replace("%3B", ";")
+            .replace("%28", "(")
+            .replace("%29", ")")
+            .replace("%3D", "=");
+        let db = db.lock().unwrap();
+        // Feed entries live alongside licenses in the same store file —
+        // prod splits this; the contract is the API.
+        let feed_path = std::env::var("SWARM_FEED_FILE").unwrap_or_else(|_| "feed.txt".into());
+        let mut feed: Vec<String> = std::fs::read_to_string(&feed_path)
+            .map(|s| s.lines().map(String::from).collect())
+            .unwrap_or_default();
+        if !entry.is_empty() && !feed.contains(&entry) {
+            feed.push(entry);
+            let _ = std::fs::write(&feed_path, feed.join("\n"));
+        }
+        drop(db);
+        "ok".into()
+    } else if path.starts_with("/feed") {
+        let feed_path = std::env::var("SWARM_FEED_FILE").unwrap_or_else(|_| "feed.txt".into());
+        std::fs::read_to_string(feed_path).unwrap_or_default()
     } else {
-        "endpoints: /verify /activate /issue /forgot".into()
+        "endpoints: /verify /activate /issue /forgot /report /feed".into()
     }
 }
 
