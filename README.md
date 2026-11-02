@@ -1,4 +1,4 @@
-# snn-firewall
+# SwarmShieldSE
 
 A pure-Rust behavioral firewall powered by a spiking neural network.
 No Python, no external AI services — a deterministic, thread-safe,
@@ -62,7 +62,7 @@ events ──► Scout (silent profiling) ──► FeatureWindow ──► Dete
 - `snn-core` — deterministic spiking net (LIF + Izhikevich, CSR, delays, rayon)
 - `snn-encode` / `snn-learn` — delta encoding, STDP
 - `snn-mesh` — detector + checkpoint stores
-- `snn-firewall` — the engine: windows, detector, rules, scout, tracker,
+- `SwarmShieldSE` — the engine: windows, detector, rules, scout, tracker,
   fingerprints, signatures, search, playbook, snapshots
 - `swarm` — `http_shield` (real HTTP front + tarpit), worker/orchestrator mesh
 - `snn-wasm` — wasm32 JSON façade

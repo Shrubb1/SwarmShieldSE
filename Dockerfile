@@ -1,6 +1,6 @@
-# snn-firewall http_shield — one-binary WAF gate.
-#   docker build -t snn-shield .
-#   docker run -d -p 8081:8081 snn-shield 0.0.0.0:8081
+# SwarmShieldSE http_shield — one-binary WAF gate.
+#   docker build -t swarmshield .
+#   docker run -d -p 8081:8081 swarmshield 0.0.0.0:8081
 FROM rust:1.83-bookworm AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock* ./
