@@ -7,6 +7,9 @@
 use native_windows_gui as nwg;
 
 const FEED: &str = r"C:\ProgramData\SwarmShieldSE\svc_feed.log";
+// Buy/activate page — swap to https://swarmshieldse.com when live (.com
+// over .au — global reach, no geo signal).
+const SIGNUP_URL: &str = "http://127.0.0.1:8080/signup";
 // Site palette
 const BG: [u8; 3] = [13, 17, 23]; // #0d1117
 const FG: [u8; 3] = [230, 237, 243]; // #e6edf3
@@ -165,7 +168,16 @@ fn main() {
             }
             E::OnButtonClick if h == toggle => {
                 let cmd = if service_running() { "stop" } else { "start" };
-                let _ = std::process::Command::new("sc").args([cmd, "SwarmShieldSE"]).status();
+                // sc needs admin — elevate via Start-Process so a UAC
+                // prompt appears instead of a silent failure.
+                let _ = std::process::Command::new("powershell")
+                    .args([
+                        "-Command",
+                        &format!(
+                            "Start-Process sc -Verb RunAs -ArgumentList '{cmd} SwarmShieldSE'"
+                        ),
+                    ])
+                    .status();
             }
             E::OnButtonClick if h == btn_act => {
                 let tok = tok_box.text();
@@ -174,6 +186,11 @@ fn main() {
                         .args(["--activate", &tok])
                         .status();
                     status.set_text("activating — checking your token…");
+                } else {
+                    // No token pasted → open the buy page.
+                    let _ = std::process::Command::new("cmd")
+                        .args(["/c", "start", SIGNUP_URL])
+                        .status();
                 }
             }
             E::OnWindowClose => nwg::stop_thread_dispatch(),
