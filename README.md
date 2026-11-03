@@ -9,9 +9,10 @@ stops what deviates from it.
 
 | Test | Result |
 |---|---|
-| Real `sqlmap` (industry pen-test tool) | Defeated — 403/429 storm; sqlmap itself suggested `--tamper` evasion |
+| `sqlmap` (industry pen-test tool) | Defeated — sqlmap itself suggested `--tamper` evasion |
 | `sqlmap --tamper=space2comment,between,randomcase` | Also defeated — 31×403 + 35×429 |
-| sqlmap overnight full scan (~2h, union + time-based blind + error-based across MySQL/PostgreSQL/Oracle/SAP HANA) | **Zero injectable parameters found** — 4,639 requests denied; sqlmap quit, suggesting a WAF was present |
+| `sqlmap` overnight scan (~2h, all techniques + DBs) | **0 injectable** — 4,639 denied; sqlmap quit, suggesting a WAF |
+| `sqlmap --level=5 --risk=3` (~7.5h, every technique + every header) | **0 injectable** — 11,580 denied; sqlmap quit recommending a WAF |
 | Malformed HTTP protocol fuzz (binary garbage, smuggling headers, negative Content-Length) | 300/300 survived AND ruled — zero crashes |
 | 200,000-event adversarial fuzz | ~27k events/sec sustained, zero degradation |
 | Real libpcap wire capture (scapy+Npcap) | 361 events parsed → rules applied |
