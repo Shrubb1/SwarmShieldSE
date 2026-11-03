@@ -22,3 +22,6 @@ path = "src/bin/swarm_worker.rs"
 [[bin]]
 name = "swarm-orchestrator"
 path = "src/bin/swarm_orchestrator.rs"
+
+[build-dependencies]
+embed-resource = "3.0.12"
