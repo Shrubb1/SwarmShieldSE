@@ -50,6 +50,11 @@ fn font(size: u32, bold: bool) -> nwg::Font {
 }
 
 fn main() {
+    // Embed the logo icon — write it out so nwg can load it everywhere.
+    let ico = std::env::temp_dir().join("swarmshield.ico");
+    let _ = std::fs::write(&ico, include_bytes!("../../app.ico"));
+    let icon_path = ico.to_string_lossy().to_string();
+
     // GUI app has no console — dump panics to a log so crashes are debuggable.
     std::panic::set_hook(Box::new(|info| {
         let _ = std::fs::write(
@@ -59,7 +64,14 @@ fn main() {
     }));
     nwg::init().expect("nwg init failed");
 
+    let mut icon = Default::default();
+    nwg::Icon::builder()
+        .source_file(Some(&icon_path))
+        .build(&mut icon)
+        .unwrap();
+
     let mut window = Default::default();
+    let mut tray: nwg::TrayNotification = Default::default();
     let mut title: nwg::Label = Default::default();
     let mut sub: nwg::Label = Default::default();
     let mut status: nwg::Label = Default::default();
@@ -73,8 +85,18 @@ fn main() {
     nwg::Window::builder()
         .size((660, 540))
         .title("SwarmShieldSE")
+        .icon(Some(&icon))
         .build(&mut window)
         .unwrap();
+
+    // System tray icon — the shield sits in the notification area.
+    nwg::TrayNotification::builder()
+        .parent(&window)
+        .icon(Some(&icon))
+        .tip(Some("SwarmShieldSE — protected"))
+        .build(&mut tray)
+        .unwrap();
+    tray.set_visibility(true);
 
     // Header
     nwg::Label::builder()
