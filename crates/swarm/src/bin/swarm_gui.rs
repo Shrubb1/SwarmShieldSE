@@ -48,6 +48,13 @@ fn font(size: u32, bold: bool) -> nwg::Font {
 }
 
 fn main() {
+    // GUI app has no console — dump panics to a log so crashes are debuggable.
+    std::panic::set_hook(Box::new(|info| {
+        let _ = std::fs::write(
+            r"C:\Users\Black\Desktop\SNN\gui_crash.log",
+            format!("{info}\n{:?}", std::backtrace::Backtrace::force_capture()),
+        );
+    }));
     nwg::init().expect("nwg init failed");
 
     let mut window = Default::default();
@@ -149,7 +156,7 @@ fn main() {
     let cache = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
     let cache_cb = cache.clone();
 
-    nwg::bind_event_handler(&window.handle, &window.handle, move |evt, _d, h| {
+    let _handler = nwg::bind_event_handler(&window.handle, &window.handle, move |evt, _d, h| {
         use nwg::Event as E;
         match evt {
             E::OnTimerTick if h == timer.handle => {
