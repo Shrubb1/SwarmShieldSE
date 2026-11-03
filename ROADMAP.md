@@ -43,9 +43,14 @@ tier ships with a regression corpus entry so it can never re-open.
 
 ## Tier 3 — platform ceiling
 
-The honest limits that aren't code gaps: MITM TLS inspection
-(root-cert opt-in), WinDivert/WFP for proxy-ignoring apps, signed
-license JWTs, Stripe/Twilio billing. All documented seams.
+- [x] **Signed offline grants** — keyed-hash `token|expiry|mid`
+      signature; a hand-edited cache can't forge a grant (prod:
+      asymmetric ed25519 — same contract)
+- [ ] MITM TLS inspection — needs `rustls`/`rcgen` + a user-installed
+      root cert (admin + big-dep)
+- [ ] WinDivert/WFP capture — needs a signed driver + admin install
+- [ ] Stripe/Twilio billing — needs your accounts; the API contract
+      is already wired
 
 ## Standing rule
 

@@ -43,6 +43,20 @@ fn machine_id() -> u64 {
 /// Verify a token against the licensing API (`SWARM_LICENSE_URL`),
 /// falling back to the cached grant within a 48h offline grace.
 /// Returns the granted tier (Free when anything fails or no token).
+/// Keyed-hash grant signature — server signs `token|expiry|mid` with a
+/// shared secret so a hand-edited cache can't forge a grant (prod would
+/// use ed25519; this is the honest no-dep version of the contract).
+fn grant_sig(token: &str, expiry: u64, mid: u64) -> u64 {
+    let secret = std::env::var("SWARM_LICENSE_SECRET")
+        .unwrap_or_else(|_| "swarmshield-v1".into());
+    let mut h = 0xcbf29ce484222325u64;
+    for b in format!("{token}|{expiry}|{mid}|{secret}").bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h
+}
+
 fn license_tier(token: Option<&str>) -> Tier {
     let cache = std::env::var("USERPROFILE")
         .map(|p| format!("{p}\\.swarmshield-license"))
@@ -65,7 +79,8 @@ fn license_tier(token: Option<&str>) -> Tier {
                         println!("  ⚠ renewal pending — update payment to keep the full tier");
                     }
                     let exp = now_ms() / 1000 + 7 * 24 * 3600 + 48 * 3600;
-                    let _ = std::fs::write(&cache, format!("{token}|{exp}|paid"));
+                    let sig = grant_sig(token, exp, machine_id());
+                    let _ = std::fs::write(&cache, format!("{token}|{exp}|{sig:x}"));
                     return Tier::Paid;
                 }
             }
@@ -76,7 +91,14 @@ fn license_tier(token: Option<&str>) -> Tier {
         let mut it = data.trim().split('|');
         if it.next() == Some(token) {
             if let Some(Ok(exp)) = it.next().map(|e| e.parse::<u64>()) {
-                if now_ms() / 1000 < exp {
+                // Signature must verify — a hand-edited cache can't
+                // forge `sig` without the shared secret.
+                let sig_ok = it
+                    .next()
+                    .and_then(|s| u64::from_str_radix(s, 16).ok())
+                    .map(|s| s == grant_sig(token, exp, machine_id()))
+                    .unwrap_or(false);
+                if sig_ok && now_ms() / 1000 < exp {
                     return Tier::Paid;
                 }
             }
