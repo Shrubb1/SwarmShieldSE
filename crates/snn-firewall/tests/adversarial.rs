@@ -110,6 +110,7 @@ fn fv(values: &[f32]) -> snn_firewall::FeatureVector {
         start_ms: 0,
         values: values.to_vec(),
         top_src: None,
+        jitter: 0.0,
     }
 }
 
@@ -159,7 +160,9 @@ fn slow_rotation_scan_needs_threshold_override() {
                 ..DetectorConfig::for_metrics(&channel_names())
             },
             &[
-                10.0, 2.0, 5.0, 500.0, 400.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0,
+                // window metrics (0-5), meta (6-14), jitter(15) last
+                10.0, 2.0, 5.0, 500.0, 400.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0,
+                10.0, 0.0,
             ],
         )
     };
@@ -173,6 +176,7 @@ fn slow_rotation_scan_needs_threshold_override() {
         ts_ms: seq * TICK,
         values: vec![
             14.0, 2.0, 9.0, 500.0, 400.0, 4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0,
+            0.0,
         ],
     };
     let d0 = default_det.observe(&sample(0));

@@ -40,6 +40,15 @@ impl Default for SequenceTracker {
 }
 
 impl SequenceTracker {
+    /// True when `ip` has an in-flight chain (any stage recorded within
+    /// the window) — other paths should defer to the predicted emit.
+    pub fn has_progress(&self, ip: &IpAddr, now_ms: u64) -> bool {
+        self.map
+            .get(ip)
+            .map(|c| c.stages != 0 && now_ms.saturating_sub(c.first_ms) <= self.window_ms)
+            .unwrap_or(false)
+    }
+
     /// Classify this event's stage and fold it into the chain.
     /// Returns `true` when stages 0+1 are both fresh within the window —
     /// the exploit is predicted imminent.

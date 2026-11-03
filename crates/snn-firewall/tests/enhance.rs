@@ -157,6 +157,7 @@ fn fv(values: &[f32]) -> snn_firewall::FeatureVector {
         start_ms: 0,
         values: values.to_vec(),
         top_src: None,
+        jitter: 0.0,
     }
 }
 

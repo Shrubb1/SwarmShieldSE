@@ -194,6 +194,10 @@ pub struct Firewall<P: PolicySink, A: AuditLog> {
     /// (zero-knowledge — the channel carries no identifying info).
     /// Consulted between the local playbook and a fresh search.
     pub shared: HashMap<u8, MitigationKind>,
+    /// Borderline-anomaly strikes per subject — repeat borderline evals
+    /// within 60s graduate to a real remediation (attacks persist,
+    /// one-off borderlines don't).
+    strikes: HashMap<String, (u32, u64)>,
 }
 
 impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
@@ -208,8 +212,12 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
         audit: A,
     ) -> Self {
         let tick_ms = policy.tick_ms;
+        // Channel set can grow (jitter added as values[6]) — pad a
+        // shorter baseline slice with zeros instead of asserting out.
+        let mut baselines = initial_baselines.to_vec();
+        baselines.resize(detector_config.metrics.len(), 0.0);
         Self {
-            detector: Detector::new(detector_config, initial_baselines),
+            detector: Detector::new(detector_config, &baselines),
             window: FeatureWindow::new(policy.tick_ms),
             policy,
             rules: RuleTable::new(),
@@ -231,6 +239,7 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
             search: HashMap::new(),
             playbook: HashMap::new(),
             shared: HashMap::new(),
+            strikes: HashMap::new(),
         }
     }
 
@@ -378,7 +387,8 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
 
         self.sample_seq += 1;
         let mut values = fv.values.clone();
-        values.extend(meta); // channels 7-9: port entropy / error / proto
+        values.extend(meta); // channels 7-15: port entropy … ja3_diversity
+        values.push(fv.jitter); // index 15 — appended last, baseline-stable
         let sample = TelemetrySample {
             seq: self.sample_seq,
             ts_ms: fv.start_ms,
@@ -419,6 +429,51 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
                 return Ok(false);
             }
             return self.remediate(fv, &det, ev);
+        }
+
+        // ── persistence-strikes + joint correlation (TPR frontier) ──
+        // A borderline eval — detector anomalous but under the firewall
+        // threshold, OR many channels mildly deviant TOGETHER — doesn't
+        // rule on its own. Instead it strikes: repeat borderline evals
+        // on the same subject graduate to a real mitigation (attacks
+        // persist; a borderline eval that happens once doesn't).
+        let joint_dev: f32 = fv
+            .values
+            .iter()
+            .zip(det.baselines.iter())
+            .map(|(v, b)| (*v - *b).abs() / b.max(1.0))
+            .sum();
+        let borderline = det.anomaly || joint_dev > 1.5;
+        let down_driven2 =
+            (det.up_spikes == 0 && det.down_spikes > 0) || det.up_free_streak >= 2;
+        // Defer to the kill-chain: an in-flight chain predicts the same
+        // threat with a better reason — don't let a strike rule land
+        // first and suppress the "predicted kill-chain" emit.
+        let chain_in_flight = fv
+            .top_src
+            .map(|(ip, _)| self.tracker.has_progress(&ip, fv.start_ms))
+            .unwrap_or(false);
+        // No strikes during cold start — the baseline needs ~10 evals
+        // before deviations mean anything; graduating earlier is noise.
+        if borderline && !down_driven2 && !chain_in_flight && self.sample_seq > 10 {
+            let key = if let Some((ip, _)) = fv.top_src {
+                format!("ip:{ip}")
+            } else {
+                format!("shape:{}:{}", ev.meta.proto, ev.meta.dst_port)
+            };
+            let n = {
+                let e = self.strikes.entry(key.clone()).or_insert((0, 0));
+                if fv.start_ms.saturating_sub(e.1) > 60_000 {
+                    *e = (0, fv.start_ms);
+                }
+                e.0 += 1;
+                e.1 = fv.start_ms;
+                e.0
+            };
+            if n >= 2 {
+                self.strikes.remove(&key);
+                return self.remediate(fv, &det, ev);
+            }
         }
         // Low-and-slow: gradual drift the delta encoder misses → scope
         // by shape when the attack is bare; Global only as last resort.

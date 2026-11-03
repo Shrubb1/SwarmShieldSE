@@ -63,6 +63,7 @@ pub fn channel_names() -> Vec<&'static str> {
         "payload_ent",   // mean payload entropy ×100 (payload scan signal)
         "sig_rate",      // signature-hit fraction ×100 (content attacks)
         "ja3_diversity", // distinct TLS fingerprints ÷ events ×100
+        "jitter",        // inter-arrival stdev — bots are metronomes
     ]
 }
 
@@ -76,6 +77,9 @@ pub struct FeatureVector {
     /// `(ip, event_count)` of the busiest source this window, if any —
     /// the candidate subject for a targeted mitigation rule.
     pub top_src: Option<(IpAddr, u32)>,
+    /// Inter-arrival stdev — appended LAST in the metric vector so the
+    /// existing baseline positions stay stable across channel growth.
+    pub jitter: f32,
 }
 
 #[derive(Default)]
@@ -85,6 +89,12 @@ struct TickAgg {
     header_bytes: u64,
     by_src: HashMap<IpAddr, u32>,
     new_srcs: u32,
+    /// Inter-arrival timing stats → the jitter channel. Machines arrive
+    /// on metronome schedules (low variance); humans jitter wildly.
+    last_ts: u64,
+    gap_sum: f64,
+    gap_sq: f64,
+    gap_n: u32,
 }
 
 /// Buckets `ConnEvent`s into fixed windows and finalizes them on demand.
@@ -142,6 +152,13 @@ impl FeatureWindow {
         if self.seen.insert(ev.src_ip) {
             self.cur.new_srcs += 1;
         }
+        if self.cur.last_ts != 0 {
+            let g = ev.ts_ms.saturating_sub(self.cur.last_ts) as f64;
+            self.cur.gap_sum += g;
+            self.cur.gap_sq += g * g;
+            self.cur.gap_n += 1;
+        }
+        self.cur.last_ts = ev.ts_ms;
     }
 
     fn finalize(&mut self, start: u64) -> FeatureVector {
@@ -164,6 +181,13 @@ impl FeatureWindow {
                 agg.new_srcs as f32 / secs,
             ],
             top_src,
+            jitter: if agg.gap_n > 1 {
+                let n = agg.gap_n as f64;
+                let mean = agg.gap_sum / n;
+                ((agg.gap_sq / n - mean * mean).max(0.0).sqrt()) as f32
+            } else {
+                0.0
+            },
         }
     }
 

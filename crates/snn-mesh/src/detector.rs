@@ -162,11 +162,10 @@ impl Detector {
     /// values (or known-good values); otherwise startup registers as one
     /// giant delta burst.
     pub fn new(config: DetectorConfig, initial_baselines: &[f32]) -> Self {
-        assert_eq!(
-            config.metrics.len(),
-            initial_baselines.len(),
-            "one baseline per metric"
-        );
+        // Channel sets grow over time (e.g. jitter added at index 6) —
+        // pad a shorter baseline slice with zeros instead of asserting.
+        let mut baselines = initial_baselines.to_vec();
+        baselines.resize(config.metrics.len(), 0.0);
         let m = config.metrics.len();
 
         let mut net = Network::new(config.dt);
@@ -196,7 +195,7 @@ impl Detector {
             net,
             learners: vec![learner],
             encoder: DeltaModulator::new(
-                initial_baselines,
+                &baselines,
                 config.delta_threshold,
                 config.spike_current,
             ),
@@ -205,7 +204,7 @@ impl Detector {
             window: config.window.max(1),
             anomaly_threshold: config.anomaly_threshold,
             state: DetectorState {
-                reference: initial_baselines.to_vec(),
+                reference: baselines,
                 ..Default::default()
             },
         }
