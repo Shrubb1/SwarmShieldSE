@@ -41,6 +41,23 @@ tier ships with a regression corpus entry so it can never re-open.
 | channel-anonymous herd sync | already shipping `ch{idx}=fix` — extend to shape patterns |
 | nightly adversarial self-fuzz | cron the evasion fuzz with new transforms → auto-corpus |
 
+## Tier 2.5 — the untested industry battery
+
+The real-world test plan — sqlmap covered one class; these cover the
+rest. Run order = value-per-effort:
+
+| # | tool | covers | status |
+|---|---|---|---|
+| 1 | **nuclei** | 10k+ real CVE templates — XSS/RCE/traversal/exposure classes sqlmap doesn't touch | queued |
+| 2 | **nikto** | classic web vuln scanner — misconfigs, dangerous files | queued |
+| 3 | **hydra** | credential brute-force — rate/lockout behavior | queued |
+| 4 | **Metasploit** | real exploit framework — actual exploit code | needs install (heavy) |
+| 5 | **real C2** | Sliver/Havoc beacon traffic — the SNN's actual job | needs framework setup |
+| 6 | **malware samples** | MalwareBazaar drops through the scanner | needs VM isolation |
+
+Each run's output goes into `tests/corpus.rs` — every real bypass
+found becomes a permanent regression.
+
 ## Tier 3 — platform ceiling
 
 - [x] **Signed offline grants** — keyed-hash `token|expiry|mid`
