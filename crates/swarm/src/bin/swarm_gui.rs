@@ -71,6 +71,9 @@ fn start_aux() {
     if !proc_running("dns_guard.exe") {
         spawn_no_console("dns_guard.exe", &[]);
     }
+    if !proc_running("swarm_watcher.exe") {
+        spawn_no_console("swarm_watcher.exe", &[]);
+    }
     let last = std::fs::read_to_string(LAST_SCAN)
         .ok()
         .and_then(|s| s.trim().parse::<u64>().ok())
