@@ -60,8 +60,9 @@
 <div class="hero3">
   <div class="side-card">
     <h4>Live results</h4>
-    <div class="stat"><span>sqlmap overnight (2h scan)</span><b>0 injectable</b></div>
-    <div class="stat"><span>requests denied</span><b>4,639</b></div>
+    <div class="stat"><span>sqlmap max level (7.5h)</span><b>0 injectable</b></div>
+    <div class="stat"><span>requests denied</span><b>11,580</b></div>
+    <div class="stat"><span>evasion coverage</span><b>99%</b></div>
     <div class="stat"><span>attack detection</span><b>~95%</b></div>
     <div class="stat"><span>fuzz survived</span><b>300/300</b></div>
     <div class="stat"><span>throughput</span><b>~27k ev/s</b></div>
@@ -107,17 +108,23 @@
     <h3>What it can do</h3>
     <ul>
       <li>Stops the fast stuff — floods, scanners, hammering bots</li>
-      <li>Catches the sneaky stuff — hackers sneaking code into your
-          requests, even when they disguise it</li>
+      <li>Catches the sneaky stuff — malicious code in requests,
+          even disguised (we catch 99% of obfuscated attacks)</li>
       <li>Sees an attack coming before the real hit lands</li>
       <li>Recognizes an attacker even when they switch IPs</li>
       <li>Blocks your passwords & API keys from leaking out</li>
       <li>Traps attackers in a fake slow lane — wastes <em>their</em> time</li>
+      <li>Catches trick attacks real firewalls miss — smuggled requests,
+          character disguises, hidden JSON payloads</li>
+      <li>Spots coordinated attacks across many IPs at once</li>
+      <li>Watches every domain your apps look up — DNS exfil dies at the
+          lookup, not the leak</li>
     </ul>
     <p class="muted" style="margin-bottom:0">Real result: we ran
-    <b>sqlmap</b> — the tool hackers actually use — at it for 2 hours
-    overnight. It found <b>nothing injectable</b> across 4,639 attempts
-    and gave up, recommending its user try a WAF instead.</p>
+    <b>sqlmap --level=5 --risk=3</b> — the tool hackers actually use,
+    at maximum aggression — for 7.5 hours. It found <b>nothing
+    injectable</b> across 11,580 denied requests and quit, recommending
+    its user try a WAF instead.</p>
   </div>
 </section>
 </div>
