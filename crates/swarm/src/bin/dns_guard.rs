@@ -107,6 +107,9 @@ fn main() {
             None => {
                 let _ = up.send_to(pkt, &upstream);
                 let mut rbuf = [0u8; 4096];
+                // Timeout — a dropped upstream reply must not hang the
+                // whole forwarder. 3s cap, client just times out.
+                let _ = up.set_read_timeout(Some(std::time::Duration::from_secs(3)));
                 if let Ok((rn, _)) = up.recv_from(&mut rbuf) {
                     let _ = sock.send_to(&rbuf[..rn], src);
                 }
