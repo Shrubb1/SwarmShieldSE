@@ -401,6 +401,21 @@ impl Signatures {
         {
             hits |= 1024;
         }
+        // Verb anomalies — TRACE/TRACK echo back request contents
+        // (XST attack); CONNECT outside a proxy context is tunnel abuse.
+        let first = h.lines().next().unwrap_or("");
+        if first.starts_with("trace ") || first.starts_with("track ") {
+            hits |= 4096;
+        }
+        // WebSocket/upgrade covert-channel attempt — a legit app doesn't
+        // upgrade to a raw tunnel mid-session.
+        if h.contains("upgrade:") && (h.contains("websocket") || h.contains("connect")) {
+            hits |= 4096;
+        }
+        // Oversized header block — buffer-abuse / smuggling padding.
+        if raw_headers.len() > 16_384 {
+            hits |= 4096;
+        }
         // JSON pollution: same key twice in one object body fragment.
         if h.contains('{') {
             let mut keys = std::collections::HashMap::new();

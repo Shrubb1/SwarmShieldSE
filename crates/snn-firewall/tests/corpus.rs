@@ -93,4 +93,16 @@ fn corpus_smuggling_stay_dead() {
         Signatures::scan_smuggling(r#"{"a":1,"a":2}"#),
         0
     );
+    // TRACE verb (XST)
+    assert_ne!(
+        Signatures::scan_smuggling("TRACE / HTTP/1.1\r\nHost: x\r\n\r\n"),
+        0
+    );
+    // WebSocket covert-channel upgrade
+    assert_ne!(
+        Signatures::scan_smuggling(
+            "GET / HTTP/1.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
+        ),
+        0
+    );
 }
