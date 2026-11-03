@@ -611,6 +611,40 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
             }
         };
 
+        // Structural-evidence gate: a pure rate-channel anomaly
+        // (req_rate/new_srcs) on well-formed HTTP traffic is almost
+        // always a benign burst (page load, image batch) — throttle,
+        // never drop. Bare shapes and payload channels keep the ladder.
+        if matches!(subject, RuleSubject::Ip(_))
+            && ev.meta.method != 0
+            && ev.meta.path_len > 0
+        {
+            let dom = fv
+                .values
+                .iter()
+                .zip(det.baselines.iter())
+                .enumerate()
+                .max_by(|(_, a), (_, b)| {
+                    (a.0 - a.1)
+                        .abs()
+                        .partial_cmp(&(b.0 - b.1).abs())
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            if dom <= 1 {
+                return self.emit_with(
+                    subject.clone(),
+                    Some(MitigationKind::RateLimit { max_rps: 10.0 }),
+                    format!(
+                        "rate-channel anomaly, well-formed traffic (score={})",
+                        det.score
+                    ),
+                    now_ms,
+                );
+            }
+        }
+
         if self.policy.search.enabled {
             return self.search_or_fix(fv, det, subject, now_ms);
         }
