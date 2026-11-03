@@ -300,13 +300,37 @@ impl Signatures {
         // Two passes: the second catches double-encoded payloads
         // (%25%33 → after pass 1 → %3 → pass 2 decodes fully).
         let norm = Self::normalize(&Self::normalize(&raw)).to_lowercase();
+        // Leet-folded shadow: matches disguised variants (`jnd1`, `cmd.3x3`)
+        // without corrupting the real payload's matching.
+        let leet = Self::leetfold(&norm);
         let mut hits = 0u16;
         for (bit, pats) in Self::TABLE {
-            if pats.iter().any(|p| raw.contains(p) || norm.contains(p)) {
+            if pats
+                .iter()
+                .any(|p| raw.contains(p) || norm.contains(p) || leet.contains(p))
+            {
                 hits |= bit;
             }
         }
         hits
+    }
+
+    /// Leet-speak fold: 1→i, 3→e, 0→o, 5→s, 7→t, 4→a. Attackers use
+    /// these to dodge literal matches — folding normalizes them back.
+    /// Runs on a SEPARATE shadow of the payload (not mixed into the main
+    /// normalized form, so legit `1=1`-style math isn't corrupted).
+    fn leetfold(s: &str) -> String {
+        s.chars()
+            .map(|c| match c {
+                '1' => 'i',
+                '3' => 'e',
+                '0' => 'o',
+                '5' => 's',
+                '7' => 't',
+                '4' => 'a',
+                _ => c,
+            })
+            .collect()
     }
 
     /// Defeats the classic evasions: strip `/* */` comments, %-decode,
