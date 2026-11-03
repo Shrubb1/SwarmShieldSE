@@ -1,27 +1,30 @@
-//! `swarm_gui` — the SwarmShieldSE desktop app. Real Win32 window,
-//! dark-themed to match the product: live status, detection feed,
-//! one-button protection toggle, and token activation.
+//! `swarm_gui` — SwarmShieldSE desktop app. WebView2 window (wry) —
+//! the real dark theme, matching the site: live status, detection
+//! feed, one-button protection toggle, token activation.
+//!
+//! IPC: the page calls `ipc.postMessage({cmd})` — toggle runs `sc`
+//! (the app is already elevated via manifest), activate runs
+//! `swarmshield.exe --activate TOK`. Status+feed push in via eval.
 
 #![cfg(windows)]
-#![windows_subsystem = "windows"] // GUI app — no console window
+#![windows_subsystem = "windows"]
 
-use native_windows_gui as nwg;
+use std::os::windows::process::CommandExt;
+use tao::{
+    event::{Event, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
+    window::WindowBuilder,
+};
+use wry::{http::{Request, Response}, WebViewBuilder};
+use std::borrow::Cow;
 
 const FEED: &str = r"C:\ProgramData\SwarmShieldSE\svc_feed.log";
-// Buy/activate page — swap to https://swarmshieldse.com when live (.com
-// over .au — global reach, no geo signal).
-const SIGNUP_URL: &str = "http://127.0.0.1:8080/signup";
-// Site palette
-const BG: [u8; 3] = [13, 17, 23]; // #0d1117
-const FG: [u8; 3] = [230, 237, 243]; // #e6edf3
-const DIM: [u8; 3] = [139, 148, 158]; // #8b949e
-const GREEN: [u8; 3] = [63, 185, 80]; // #3fb950
+const NO_WINDOW: u32 = 0x08000000;
 
 fn service_running() -> bool {
-    use std::os::windows::process::CommandExt;
     std::process::Command::new("tasklist")
         .args(["/FO", "CSV", "/NH"])
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW — no console flash
+        .creation_flags(NO_WINDOW)
         .output()
         .map(|o| {
             let s = String::from_utf8_lossy(&o.stdout);
@@ -30,207 +33,89 @@ fn service_running() -> bool {
         .unwrap_or(false)
 }
 
-fn read_feed() -> Vec<String> {
+fn feed_lines() -> Vec<String> {
     std::fs::read_to_string(FEED)
         .ok()
         .map(|s| s.lines().map(|l| l.to_string()).collect::<Vec<_>>())
         .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| vec!["  feed is quiet — nothing blocked yet".into()])
+        .unwrap_or_default()
 }
 
-fn font(size: u32, bold: bool) -> nwg::Font {
-    let mut f: nwg::Font = Default::default();
-    nwg::Font::builder()
-        .family("Segoe UI")
-        .size(size)
-        .weight(if bold { 700 } else { 400 })
-        .build(&mut f)
-        .ok();
-    f
-}
+const HTML: &str = include_str!("../../gui.html");
 
 fn main() {
-    // Embed the logo icon — write it out so nwg can load it everywhere.
-    let ico = std::env::temp_dir().join("swarmshield.ico");
-    let _ = std::fs::write(&ico, include_bytes!("../../app.ico"));
-    let icon_path = ico.to_string_lossy().to_string();
-
-    // GUI app has no console — dump panics to a log so crashes are debuggable.
     std::panic::set_hook(Box::new(|info| {
-        let _ = std::fs::write(
-            r"C:\Users\Black\Desktop\SNN\gui_crash.log",
-            format!("{info}\n{:?}", std::backtrace::Backtrace::force_capture()),
-        );
+        let _ = std::fs::write(r"C:\Users\Black\Desktop\SNN\gui_crash.log", info.to_string());
     }));
-    nwg::init().expect("nwg init failed");
 
-    let mut icon = Default::default();
-    nwg::Icon::builder()
-        .source_file(Some(&icon_path))
-        .build(&mut icon)
-        .unwrap();
-
-    let mut window = Default::default();
-    let mut tray: nwg::TrayNotification = Default::default();
-    let mut title: nwg::Label = Default::default();
-    let mut sub: nwg::Label = Default::default();
-    let mut status: nwg::Label = Default::default();
-    let mut feed_title: nwg::Label = Default::default();
-    let mut feed: nwg::ListBox<String> = Default::default();
-    let mut toggle: nwg::Button = Default::default();
-    let mut tok_box: nwg::TextInput = Default::default();
-    let mut btn_act: nwg::Button = Default::default();
-    let mut timer = Default::default();
-
-    nwg::Window::builder()
-        .size((660, 540))
-        .title("SwarmShieldSE")
-        .icon(Some(&icon))
-        .build(&mut window)
+    let el: EventLoop<()> = EventLoop::new();
+    let proxy = el.create_proxy();
+    let window = WindowBuilder::new()
+        .with_title("SwarmShieldSE")
+        .with_inner_size(tao::dpi::LogicalSize::new(680.0, 560.0))
+        .build(&el)
         .unwrap();
 
-    // System tray icon — the shield sits in the notification area.
-    nwg::TrayNotification::builder()
-        .parent(&window)
-        .icon(Some(&icon))
-        .tip(Some("SwarmShieldSE — protected"))
-        .build(&mut tray)
-        .unwrap();
-    tray.set_visibility(true);
-
-    // Header
-    nwg::Label::builder()
-        .text("SwarmShieldSE")
-        .position((24, 20))
-        .size((400, 30))
-        .background_color(Some(BG))
-        .font(Some(&font(28, true)))
-        .parent(&window)
-        .build(&mut title)
-        .unwrap();
-    nwg::Label::builder()
-        .text("the firewall that learns — pure Rust, runs locally")
-        .position((26, 56))
-        .size((440, 20))
-        .background_color(Some(BG))
-        .font(Some(&font(17, false)))
-        .parent(&window)
-        .build(&mut sub)
-        .unwrap();
-
-    // Status line
-    nwg::Label::builder()
-        .text("status: checking…")
-        .position((26, 92))
-        .size((560, 24))
-        .background_color(Some(BG))
-        .font(Some(&font(20, false)))
-        .parent(&window)
-        .build(&mut status)
-        .unwrap();
-
-    // Feed
-    nwg::Label::builder()
-        .text("blocked-event feed")
-        .position((26, 128))
-        .size((300, 18))
-        .background_color(Some(BG))
-        .font(Some(&font(15, true)))
-        .parent(&window)
-        .build(&mut feed_title)
-        .unwrap();
-    nwg::ListBox::builder()
-        .position((24, 152))
-        .size((612, 270))
-        .collection(vec!["  loading…".to_string()])
-        .font(Some(&font(15, false)))
-        .parent(&window)
-        .build(&mut feed)
+    let wv = WebViewBuilder::new()
+        .with_html(HTML)
+        .with_custom_protocol("swarm".into(), |_id, _req| {
+            Response::builder()
+                .header("Content-Type", "image/png")
+                .body(Cow::Borrowed(&include_bytes!("../../app.ico")[..]))
+                .unwrap()
+        })
+        .with_ipc_handler(move |req: Request<String>| {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(req.body()) {
+                match v.get("cmd").and_then(|c| c.as_str()) {
+                    Some("toggle") => {
+                        let cmd = if service_running() { "stop" } else { "start" };
+                        let _ = std::process::Command::new("sc")
+                            .args([cmd, "SwarmShieldSE"])
+                            .creation_flags(NO_WINDOW)
+                            .status();
+                    }
+                    Some("activate") => {
+                        let tok = v.get("token").and_then(|t| t.as_str()).unwrap_or("");
+                        if !tok.is_empty() {
+                            let _ = std::process::Command::new("swarmshield.exe")
+                                .args(["--activate", tok])
+                                .creation_flags(NO_WINDOW)
+                                .status();
+                        } else {
+                            let _ = std::process::Command::new("cmd")
+                                .args(["/c", "start", "http://127.0.0.1:8080/signup"])
+                                .creation_flags(NO_WINDOW)
+                                .status();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        })
+        .build(&window)
         .unwrap();
 
-    // Controls row
-    nwg::Button::builder()
-        .text("Protection: ON")
-        .position((24, 438))
-        .size((180, 44))
-        .font(Some(&font(17, true)))
-        .parent(&window)
-        .build(&mut toggle)
-        .unwrap();
-    nwg::TextInput::builder()
-        .background_color(Some(BG))
-        .position((220, 444))
-        .size((270, 32))
-        .placeholder_text(Some("SS-SE-XXXX-XXXX"))
-        .background_color(Some(BG))
-        .font(Some(&font(15, false)))
-        .parent(&window)
-        .build(&mut tok_box)
-        .unwrap();
-    nwg::Button::builder()
-        .text("Activate Pro")
-        .position((498, 438))
-        .size((138, 44))
-        .font(Some(&font(15, false)))
-        .parent(&window)
-        .build(&mut btn_act)
-        .unwrap();
+    // Status tick: a thread pings the loop every 2s → evaluate_script.
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let _ = proxy.send_event(());
+    });
 
-    nwg::AnimationTimer::builder()
-        .interval(std::time::Duration::from_secs(2))
-        .parent(&window)
-        .build(&mut timer)
-        .unwrap();
-    timer.start();
-
-    let cache = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
-    let cache_cb = cache.clone();
-
-    let _handler = nwg::bind_event_handler(&window.handle, &window.handle, move |evt, _d, h| {
-        use nwg::Event as E;
-        match evt {
-            E::OnTimerTick if h == timer.handle => {
+    el.run(move |event, _, cf| {
+        *cf = ControlFlow::Wait;
+        match event {
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => *cf = ControlFlow::Exit,
+            Event::UserEvent(()) => {
                 let on = service_running();
-                status.set_text(if on {
-                    "●  PROTECTED — the guard is watching"
-                } else {
-                    "○  not running — flip the switch below"
-                });
-                toggle.set_text(if on { "Protection: ON" } else { "Protection: OFF" });
-                let items = read_feed();
-                let mut c = cache_cb.borrow_mut();
-                if *c != items {
-                    *c = items.clone();
-                    feed.set_collection(items);
-                }
+                let feed = feed_lines().join("<br>");
+                let js = format!(
+                    "upd({}, `{}`)",
+                    on,
+                    feed.replace('\\', "\\\\").replace('`', "\\`")
+                );
+                let _ = wv.evaluate_script(&js);
             }
-            E::OnButtonClick if h == toggle => {
-                let cmd = if service_running() { "stop" } else { "start" };
-                // App is already elevated — sc runs directly, no popup.
-                use std::os::windows::process::CommandExt;
-                let _ = std::process::Command::new("sc")
-                    .args([cmd, "SwarmShieldSE"])
-                    .creation_flags(0x08000000)
-                    .status();
-            }
-            E::OnButtonClick if h == btn_act => {
-                let tok = tok_box.text();
-                if !tok.is_empty() {
-                    let _ = std::process::Command::new("swarmshield.exe")
-                        .args(["--activate", &tok])
-                        .status();
-                    status.set_text("activating — checking your token…");
-                } else {
-                    // No token pasted → open the buy page.
-                    let _ = std::process::Command::new("cmd")
-                        .args(["/c", "start", SIGNUP_URL])
-                        .status();
-                }
-            }
-            E::OnWindowClose => nwg::stop_thread_dispatch(),
             _ => {}
         }
     });
-
-    nwg::dispatch_thread_events();
 }

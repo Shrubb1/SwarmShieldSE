@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  *{box-sizing:border-box;margin:0}
+  body{font-family:"Segoe UI",system-ui,sans-serif;background:#0b0e14;color:#e6edf3;
+       height:100vh;display:flex;flex-direction:column;padding:26px 30px;user-select:none}
+  .hdr{display:flex;align-items:center;gap:16px;margin-bottom:8px}
+  .hdr img{width:84px;height:84px;filter:drop-shadow(0 4px 14px rgba(88,166,255,.35))}
+  .hdr .t h1{font-size:26px;color:#3fb950;letter-spacing:-.5px;line-height:1.1}
+  .hdr .t p{font-size:12.5px;color:#8b949e;margin-top:4px}
+  .status{font-size:15px;margin:14px 0 8px;padding:10px 14px;background:#161b22;
+          border:1px solid #30363d;border-radius:9px}
+  .status.on{border-color:#238636;color:#3fb950}
+  .status.off{border-color:#f85149;color:#f85149}
+  .ft{font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:1px;margin:12px 0 6px}
+  #feed{flex:1;background:#161b22;border:1px solid #30363d;border-radius:9px;
+        padding:12px 14px;font-size:12.5px;color:#8b949e;overflow-y:auto;line-height:1.9}
+  #feed .hit{color:#f85149}
+  .row{display:flex;gap:12px;margin-top:18px}
+  #tog{background:#238636;border:0;color:#fff;font-weight:600;font-size:14px;
+       padding:13px 22px;border-radius:9px;cursor:pointer;min-width:170px}
+  #tog.off{background:#da3633}
+  #tok{flex:1;background:#0d1117;border:1px solid #30363d;border-radius:9px;
+       color:#e6edf3;padding:0 14px;font-size:13px}
+  #tok::placeholder{color:#484f58}
+  #act{background:transparent;border:1px solid #30363d;color:#8b949e;
+       padding:13px 18px;border-radius:9px;font-size:13px;cursor:pointer}
+  #act:hover{color:#e6edf3;border-color:#58a6ff}
+  button:hover{filter:brightness(1.15)}
+</style>
+</head>
+<body>
+  <div class="hdr">
+    <img src="swarm://logo.png" onerror="this.style.display='none'">
+    <div class="t">
+      <h1>SwarmShieldSE</h1>
+      <p>the firewall that learns — pure Rust, runs locally, zero telemetry</p>
+    </div>
+  </div>
+  <div class="status" id="st">checking…</div>
+  <div class="ft">blocked-event feed</div>
+  <div id="feed">feed is quiet — nothing blocked yet</div>
+  <div class="row">
+    <button id="tog">Protection: ON</button>
+    <input id="tok" placeholder="SS-SE-XXXX-XXXX (activation token)">
+    <button id="act">Activate Pro</button>
+  </div>
+<script>
+  const st=document.getElementById('st'), tog=document.getElementById('tog'),
+        feed=document.getElementById('feed');
+  window.upd=function(on,txt){
+    st.className='status '+(on?'on':'off');
+    st.textContent=on?'●  PROTECTED — the guard is watching':'○  not running — flip the switch';
+    tog.className=on?'':'off';
+    tog.textContent='Protection: '+(on?'ON':'OFF');
+    if(txt)feed.innerHTML=txt;
+  };
+  tog.onclick=()=>ipc.postMessage(JSON.stringify({cmd:'toggle'}));
+  document.getElementById('act').onclick=()=>{
+    ipc.postMessage(JSON.stringify({cmd:'activate',token:tok.value.trim()}));
+  };
+</script>
+</body>
+</html>
