@@ -103,6 +103,7 @@ fn main() {
         .text("SwarmShieldSE")
         .position((24, 20))
         .size((400, 30))
+        .background_color(Some(BG))
         .font(Some(&font(28, true)))
         .parent(&window)
         .build(&mut title)
@@ -111,6 +112,7 @@ fn main() {
         .text("the firewall that learns — pure Rust, runs locally")
         .position((26, 56))
         .size((440, 20))
+        .background_color(Some(BG))
         .font(Some(&font(17, false)))
         .parent(&window)
         .build(&mut sub)
@@ -121,6 +123,7 @@ fn main() {
         .text("status: checking…")
         .position((26, 92))
         .size((560, 24))
+        .background_color(Some(BG))
         .font(Some(&font(20, false)))
         .parent(&window)
         .build(&mut status)
@@ -131,6 +134,7 @@ fn main() {
         .text("blocked-event feed")
         .position((26, 128))
         .size((300, 18))
+        .background_color(Some(BG))
         .font(Some(&font(15, true)))
         .parent(&window)
         .build(&mut feed_title)
@@ -154,9 +158,11 @@ fn main() {
         .build(&mut toggle)
         .unwrap();
     nwg::TextInput::builder()
+        .background_color(Some(BG))
         .position((220, 444))
         .size((270, 32))
         .placeholder_text(Some("SS-SE-XXXX-XXXX"))
+        .background_color(Some(BG))
         .font(Some(&font(15, false)))
         .parent(&window)
         .build(&mut tok_box)
@@ -200,15 +206,11 @@ fn main() {
             }
             E::OnButtonClick if h == toggle => {
                 let cmd = if service_running() { "stop" } else { "start" };
-                // sc needs admin — elevate via Start-Process so a UAC
-                // prompt appears instead of a silent failure.
-                let _ = std::process::Command::new("powershell")
-                    .args([
-                        "-Command",
-                        &format!(
-                            "Start-Process sc -Verb RunAs -ArgumentList '{cmd} SwarmShieldSE'"
-                        ),
-                    ])
+                // App is already elevated — sc runs directly, no popup.
+                use std::os::windows::process::CommandExt;
+                let _ = std::process::Command::new("sc")
+                    .args([cmd, "SwarmShieldSE"])
+                    .creation_flags(0x08000000)
                     .status();
             }
             E::OnButtonClick if h == btn_act => {
