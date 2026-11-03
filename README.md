@@ -13,6 +13,7 @@ stops what deviates from it.
 | `sqlmap --tamper=space2comment,between,randomcase` | Also defeated — 31×403 + 35×429 |
 | `sqlmap` overnight scan (~2h, all techniques + DBs) | **0 injectable** — 4,639 denied; sqlmap quit, suggesting a WAF |
 | `sqlmap --level=5 --risk=3` (~7.5h, every technique + every header) | **0 injectable** — 11,580 denied; sqlmap quit recommending a WAF |
+| `nuclei` full CVE template scan (6,471 templates) | **0 vulnerabilities found** — marked the target unresponsive 30× (tarpit) |
 | Malformed HTTP protocol fuzz (binary garbage, smuggling headers, negative Content-Length) | 300/300 survived AND ruled — zero crashes |
 | 200,000-event adversarial fuzz | ~27k events/sec sustained, zero degradation |
 | Real libpcap wire capture (scapy+Npcap) | 361 events parsed → rules applied |
