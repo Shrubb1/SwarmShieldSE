@@ -39,13 +39,14 @@ pub fn is_ad(host: &str) -> bool {
     {
         return true;
     }
-    // Heuristic — ad-shaped hostnames not on the list (ads.*,
-    // adserver.*, tracking.*, telemetry.*, telemetry-like subdomains).
+    // Heuristic — ad-shaped hostnames not on the list. Keep it to
+    // REAL ad-serving labels only: telemetry/beacon/tracking are
+    // legitimate infra subdomains (discord, browsers, games all
+    // use them) — flagging them breaks real apps.
     for l in h.split('.') {
         if matches!(
             l,
-            "ads" | "adserver" | "adnxs" | "tracking" | "tracker" | "telemetry"
-                | "admetric" | "beacon" | "advert" | "advertising"
+            "ads" | "adserver" | "adnxs" | "admetric" | "advert" | "advertising"
         ) {
             return true;
         }

@@ -42,12 +42,55 @@ fn feed_lines() -> Vec<String> {
 }
 
 const HTML: &str = include_str!("../../gui.html");
+const LAST_SCAN: &str = r"C:\ProgramData\SwarmShieldSE\last_scan.txt";
+const WEEK_MS: u64 = 7 * 24 * 3600 * 1000;
+
+fn proc_running(name: &str) -> bool {
+    std::process::Command::new("tasklist")
+        .args(["/FO", "CSV", "/NH"])
+        .creation_flags(NO_WINDOW)
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains(name))
+        .unwrap_or(false)
+}
+
+fn spawn_no_console(exe: &str, args: &[&str]) {
+    let dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .unwrap_or_default();
+    let _ = std::process::Command::new(dir.join(exe))
+        .args(args)
+        .creation_flags(NO_WINDOW)
+        .spawn();
+}
+
+/// On launch: spawn the bundled pieces. Ad-block (dns_guard) is free
+/// and always-on; the scanner auto-runs weekly on the free tier.
+fn start_aux() {
+    if !proc_running("dns_guard.exe") {
+        spawn_no_console("dns_guard.exe", &[]);
+    }
+    let last = std::fs::read_to_string(LAST_SCAN)
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .unwrap_or(0);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    if now - last > WEEK_MS && !proc_running("swarm_scanner.exe") {
+        spawn_no_console("swarm_scanner.exe", &[r"C:\Users"]);
+        let _ = std::fs::write(LAST_SCAN, now.to_string());
+    }
+}
 
 fn main() {
     std::panic::set_hook(Box::new(|info| {
         let _ = std::fs::write(r"C:\Users\Black\Desktop\SNN\gui_crash.log", info.to_string());
     }));
 
+    start_aux();
     let el: EventLoop<()> = EventLoop::new();
     let proxy = el.create_proxy();
     // Window/taskbar icon — the tight square shield as RGBA.
