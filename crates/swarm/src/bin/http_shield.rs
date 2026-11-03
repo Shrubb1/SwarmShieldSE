@@ -88,6 +88,18 @@ fn handle(s: &mut TcpStream, fw: &mut Firewall<RecordingPolicySink, MemoryAudit>
                 fwd_for = t[h.len()..].split(',').next().map(|s| s.trim().to_string());
             }
         }
+        if tl.starts_with("host:") {
+            let host = t[5..].split(':').next().unwrap_or("").trim();
+            if swarm::adblock::is_ad(host) {
+                // Ad request → fast 204, no tarpit — the page loads
+                // fast, the ad slot just shows nothing.
+                let _ = s.write_all(
+                    b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                );
+                eprintln!("[shield] ad-blocked host={host}");
+                return;
+            }
+        }
     }
     // Tier-1 smuggling/charset gate — the attacks that beat real WAFs:
     // TE.CL/CL.TE conflicts, duplicate Content-Length, UTF-7/overlong

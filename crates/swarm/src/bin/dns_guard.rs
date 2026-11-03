@@ -40,6 +40,10 @@ fn qname(pkt: &[u8]) -> Option<String> {
 /// Long labels, high entropy, many labels, hex/base64-y, or known-sus.
 fn flag(name: &str) -> Option<String> {
     let low = name.to_lowercase();
+    // Ad/tracker network — blocked at the lookup, ad never loads.
+    if swarm::adblock::is_ad(&low) {
+        return Some(format!("ad/tracker domain '{low}'"));
+    }
     let labels: Vec<&str> = low.split('.').collect();
     let longest = labels.iter().map(|l| l.len()).max().unwrap_or(0);
     if longest > 40 {

@@ -8,6 +8,7 @@
 //!   `jobs/{id}/mesh.jsonl` audit.
 //! - [`proto`]: length-prefixed JSON frames, same serde types as JsonApi.
 
+pub mod adblock;
 pub mod control;
 pub mod crash;
 pub mod proto;
