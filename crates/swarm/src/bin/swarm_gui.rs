@@ -61,7 +61,7 @@ fn main() {
         .with_custom_protocol("swarm".into(), |_id, _req| {
             Response::builder()
                 .header("Content-Type", "image/png")
-                .body(Cow::Borrowed(&include_bytes!("../../app.ico")[..]))
+                .body(Cow::Borrowed(&include_bytes!("../../../../site/assets/logo_sq.png")[..]))
                 .unwrap()
         })
         .with_ipc_handler(move |req: Request<String>| {
