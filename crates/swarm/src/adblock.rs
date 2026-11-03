@@ -44,6 +44,30 @@ pub const SAFE_SUFFIXES: &[&str] = &[
     "riotgames.com", "blizzard.com", "battle.net", "gog.com",
     "ea.com", "origin.com", "xbox.com", "xboxlive.com",
     "playstation.net", "nintendo.com", "ubisoft.com",
+    // Big services — OS, browsers, dev tools, comms
+    "microsoft.com", "windows.com", "windows.net", "windowsupdate.com",
+    "live.com", "office.com", "office365.com", "bing.com", "azure.com",
+    "apple.com", "icloud.com", "mzstatic.com", "itunes.com",
+    "google.com", "googleapis.com", "gstatic.com", "googleusercontent.com",
+    "googlevideo.com", "youtube.com", "ytimg.com", "ggpht.com", "gvt1.com",
+    "android.com", "chrome.com", "chromium.org", "firebaseio.com",
+    "github.com", "githubusercontent.com", "github.io", "gitlab.com",
+    "stackoverflow.com", "stackexchange.com", "npmjs.com", "npmjs.org",
+    "python.org", "pypi.org", "crates.io", "rust-lang.org", "docker.com",
+    "openai.com", "anthropic.com", "claude.ai", "chatgpt.com",
+    "discord.com", "slack.com", "telegram.org", "whatsapp.com",
+    "signal.org", "zoom.us", "teams.microsoft.com",
+    // Social/streaming
+    "twitter.com", "x.com", "facebook.com", "instagram.com",
+    "tiktok.com", "reddit.com", "pinterest.com", "snapchat.com",
+    "twitch.tv", "youtube.com", "netflix.com", "spotify.com",
+    "hulu.com", "disneyplus.com", "twitch.tv", "kick.com",
+    // Shopping/payments
+    "amazon.com", "paypal.com", "stripe.com", "ebay.com",
+    "walmart.com", "target.com", "etsy.com",
+    // ISPs/CDN/security — needed infra
+    "cloudflare.com", "cloudflare-dns.com", "one.one.one.one",
+    "apple-dns.net", "google-dns.com", "opendns.com",
 ];
 
 /// Is `host` on the safe-infra list (exact or suffix)?
