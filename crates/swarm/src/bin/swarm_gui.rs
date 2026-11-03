@@ -3,6 +3,7 @@
 //! one-button protection toggle, and token activation.
 
 #![cfg(windows)]
+#![windows_subsystem = "windows"] // GUI app — no console window
 
 use native_windows_gui as nwg;
 
