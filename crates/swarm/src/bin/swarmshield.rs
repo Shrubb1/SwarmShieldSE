@@ -574,6 +574,30 @@ fn main() {
         return;
     }
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // `--activate TOKEN` — bind the token to this machine + cache the
+    // signed grant. The GUI's Activate button calls this.
+    if let Some(tok) = args
+        .iter()
+        .position(|a| a == "--activate")
+        .and_then(|i| args.get(i + 1))
+    {
+        let mid = machine_id();
+        let act = format!(
+            "{}/activate?token={}&email=&mid={:x}",
+            std::env::var("SWARM_LICENSE_URL")
+                .unwrap_or_else(|_| "http://127.0.0.1:9100".into()),
+            tok,
+            mid
+        );
+        let bind = fetch_blocklist(&act)
+            .ok()
+            .and_then(|r| r.first().map(|s| s.trim().to_string()))
+            .unwrap_or_else(|| "unreachable".into());
+        println!("  activate: {bind}");
+        // Verify + cache the signed grant so Pro persists offline.
+        let _ = license_tier(Some(tok));
+        return;
+    }
     let quiet = args.iter().any(|a| a == "-q");
     let token = args
         .iter()

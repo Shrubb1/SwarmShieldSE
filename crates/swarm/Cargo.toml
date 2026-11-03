@@ -13,6 +13,7 @@ snn-firewall = { path = "../snn-firewall" }
 snn-runtime = { path = "../snn-runtime" }
 windows-service = "0.8.1"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
+native-windows-gui = "1.0.13"
 
 [[bin]]
 name = "swarm-worker"
