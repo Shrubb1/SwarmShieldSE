@@ -12,6 +12,7 @@ snn-mesh = { path = "../snn-mesh" }
 snn-firewall = { path = "../snn-firewall" }
 snn-runtime = { path = "../snn-runtime" }
 windows-service = "0.8.1"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
 
 [[bin]]
 name = "swarm-worker"

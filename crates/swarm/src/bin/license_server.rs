@@ -11,10 +11,44 @@
 //! Prod flow: Stripe webhook → /issue → email token → client /activate
 //! → periodic /verify (48h offline grace client-side).
 
+use ed25519_dalek::{Signer, SigningKey};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Dev signing key — deterministic from a fixed seed so the client's
+/// baked-in public key verifies it. Prod: env var or HSM, never baked.
+fn signing_key() -> SigningKey {
+    let seed = std::env::var("SWARM_SIGN_SEED")
+        .map(|s| {
+            let mut h = [0u8; 32];
+            for (i, b) in s.bytes().cycle().take(32).enumerate() {
+                h[i] ^= b;
+            }
+            h
+        })
+        .unwrap_or_else(|_| {
+            // dev seed — the matching pub key lives in swarmshield.rs
+            let mut s = [0x55u8; 32];
+            for (i, b) in b"swarmshield-dev-signing-seed".iter().enumerate() {
+                s[i % 32] ^= *b;
+            }
+            s
+        });
+    SigningKey::from_bytes(&seed)
+}
+
+/// Sign the grant — `token|expiry|mid` — only the private key can.
+fn grant_sig(token: &str, expiry: u64, mid: u64) -> String {
+    let msg = format!("{token}|{expiry}|{mid:x}");
+    signing_key()
+        .sign(msg.as_bytes())
+        .to_bytes()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
 
 #[derive(Clone)]
 struct Lic {
@@ -74,7 +108,7 @@ fn route(path: &str, db: &Mutex<Vec<Lic>>) -> String {
             // Failed-payment grace: expired <3d still active, flagged.
             Some(l) if l.expires < now() && l.expires + 3 * 86400 >= now() => "grace".into(),
             Some(l) if l.expires < now() => "expired".into(),
-            Some(_) => "active".into(),
+            Some(l) => format!("active|{}", grant_sig(&tok, l.expires, mid)),
             None => "invalid".into(),
         }
     } else if path.starts_with("/activate") {

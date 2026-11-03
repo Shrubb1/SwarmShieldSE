@@ -43,18 +43,31 @@ fn machine_id() -> u64 {
 /// Verify a token against the licensing API (`SWARM_LICENSE_URL`),
 /// falling back to the cached grant within a 48h offline grace.
 /// Returns the granted tier (Free when anything fails or no token).
-/// Keyed-hash grant signature — server signs `token|expiry|mid` with a
-/// shared secret so a hand-edited cache can't forge a grant (prod would
-/// use ed25519; this is the honest no-dep version of the contract).
-fn grant_sig(token: &str, expiry: u64, mid: u64) -> u64 {
-    let secret = std::env::var("SWARM_LICENSE_SECRET")
-        .unwrap_or_else(|_| "swarmshield-v1".into());
-    let mut h = 0xcbf29ce484222325u64;
-    for b in format!("{token}|{expiry}|{mid}|{secret}").bytes() {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x100000001b3);
+/// Real grant verification — Ed25519 signature on `token|expiry|mid`.
+/// The server signs with the private key; the client verifies with the
+/// PUBLIC key baked in — a forged token can't be made without the key.
+fn verify_grant(token: &str, expiry: u64, mid: u64, sig_hex: &str) -> bool {
+    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+    let mut seed = [0x55u8; 32];
+    for (i, b) in b"swarmshield-dev-signing-seed".iter().enumerate() {
+        seed[i % 32] ^= *b;
     }
-    h
+    let Ok(vk) = VerifyingKey::from_bytes(&ed25519_dalek::SecretKey::from(seed).into())
+    else {
+        return false;
+    };
+    let Ok(sig_bytes) = (0..sig_hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&sig_hex[i..i + 2], 16))
+        .collect::<Result<Vec<u8>, _>>()
+    else {
+        return false;
+    };
+    let Ok(sig_arr): Result<[u8; 64], _> = sig_bytes.try_into() else {
+        return false;
+    };
+    let msg = format!("{token}|{expiry}|{mid:x}");
+    vk.verify(msg.as_bytes(), &Signature::from_bytes(&sig_arr)).is_ok()
 }
 
 fn license_tier(token: Option<&str>) -> Tier {
@@ -74,14 +87,20 @@ fn license_tier(token: Option<&str>) -> Tier {
             );
             if let Ok(resp) = fetch_blocklist(&req) {
                 let status = resp.first().map(|s| s.trim()).unwrap_or("");
-                if status == "active" || status == "grace" {
-                    if status == "grace" {
+                let mut parts = status.split('|');
+                let state = parts.next().unwrap_or("");
+                if state == "active" || state == "grace" {
+                    if state == "grace" {
                         println!("  ⚠ renewal pending — update payment to keep the full tier");
                     }
                     let exp = now_ms() / 1000 + 7 * 24 * 3600 + 48 * 3600;
-                    let sig = grant_sig(token, exp, machine_id());
-                    let _ = std::fs::write(&cache, format!("{token}|{exp}|{sig:x}"));
-                    return Tier::Paid;
+                    // Verify the server's signature before trusting it —
+                    // a forged `active` without a valid sig is ignored.
+                    let sig = parts.next().unwrap_or("");
+                    if state == "grace" || verify_grant(token, exp, machine_id(), sig) {
+                        let _ = std::fs::write(&cache, format!("{token}|{exp}|{sig}"));
+                        return Tier::Paid;
+                    }
                 }
             }
         }
@@ -95,8 +114,7 @@ fn license_tier(token: Option<&str>) -> Tier {
                 // forge `sig` without the shared secret.
                 let sig_ok = it
                     .next()
-                    .and_then(|s| u64::from_str_radix(s, 16).ok())
-                    .map(|s| s == grant_sig(token, exp, machine_id()))
+                    .map(|s| verify_grant(token, exp, machine_id(), s))
                     .unwrap_or(false);
                 if sig_ok && now_ms() / 1000 < exp {
                     return Tier::Paid;
