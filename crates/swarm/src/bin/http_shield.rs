@@ -122,6 +122,7 @@ fn handle(s: &mut TcpStream, fw: &mut Firewall<RecordingPolicySink, MemoryAudit>
         payload: Some(raw.clone().into_boxed_slice()),
     };
     let verdict = fw.inspect(&ev).unwrap_or(Verdict::Allow);
+    eprintln!("[shield] {src} → {verdict:?}");
     match verdict {
         Verdict::Allow => {
             let body = "<html><head><title>SwarmShieldSE</title></head><body style=\"font-family:monospace;background:#0d1117;color:#3fb950;padding:40px\"><h2>&#x1f6e1; SwarmShieldSE</h2><p>request clean — behavioral SNN firewall active</p><p style=\"color:#8b949e;font-size:12px\">every packet profiled &middot; threats tarpitted</p></body></html>";

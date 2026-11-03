@@ -318,6 +318,19 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
                 ev.ts_ms,
             )?;
         }
+        // Attack-class signatures (SQLi/XSS/traversal/shell/scanner/JNDI
+        // — bits 1-32) are ground truth: one malicious request denies,
+        // no volume needed. Signatures enforce, they don't just score.
+        if sig_mask & 63 != 0 {
+            // Hard Drop — not the offense ladder: a signature is proof,
+            // the triggering request itself must not pass.
+            ruled_now |= self.emit_with(
+                RuleSubject::Ip(ev.src_ip),
+                Some(MitigationKind::Drop),
+                "malicious payload signature".to_string(),
+                ev.ts_ms,
+            )?;
+        }
         let predicted = self.tracker.observe(ev, sig_hit);
         // Actor fingerprint: a flagged ja3+ua on a NEW source IP is a
         // rotation — flag it on event one, no re-learning needed.

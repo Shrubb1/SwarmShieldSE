@@ -106,3 +106,23 @@ fn corpus_smuggling_stay_dead() {
         0
     );
 }
+
+
+#[test]
+fn sig_hit_denies_instantly() {
+    let baselines = vec![0.0f32; 16];
+    let mut fw = snn_firewall::Firewall::new(
+        snn_mesh::DetectorConfig::for_metrics(&snn_firewall::channel_names()),
+        snn_firewall::FirewallPolicy::default(),
+        &baselines,
+        snn_firewall::RecordingPolicySink::default(),
+        snn_firewall::MemoryAudit::new(),
+    );
+    let mut ev = snn_firewall::ConnEvent {
+        ts_ms: 1_700_000_000_000, tenant: "t".into(), src_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(1,2,3,4)),
+        payload_bytes: 50, header_bytes: 50, meta: Default::default(),
+        payload: Some(b"GET /x=<script>alert(1)</script> HTTP/1.0".to_vec().into_boxed_slice()),
+    };
+    let v = fw.inspect(&ev).unwrap();
+    assert!(matches!(v, snn_firewall::Verdict::Denied{..}), "sig hit must deny");
+}
