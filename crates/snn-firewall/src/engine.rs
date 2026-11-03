@@ -198,6 +198,13 @@ pub struct Firewall<P: PolicySink, A: AuditLog> {
     /// within 60s graduate to a real remediation (attacks persist,
     /// one-off borderlines don't).
     strikes: HashMap<String, (u32, u64)>,
+    /// Learned-benign reputation: sources present in clean windows earn
+    /// trust (0-5). Reputation ONLY shields against ambiguous window
+    /// attribution (watch/strike paths) — explicit evidence (signatures,
+    /// kill-chains, fingerprints, scout flags) still rules instantly.
+    /// A real user accumulates innocence; an attacker never lingers
+    /// benignly long enough.
+    rep: HashMap<IpAddr, u8>,
 }
 
 impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
@@ -240,6 +247,7 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
             playbook: HashMap::new(),
             shared: HashMap::new(),
             strikes: HashMap::new(),
+            rep: HashMap::new(),
         }
     }
 
@@ -409,6 +417,15 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
         // Reference-anchor breach: |observed - frozen baseline| escapes
         // adaptive absorption entirely — slow walks stay visible.
         let ref_breach = det.reference_drift > self.policy.ref_drift_threshold;
+        // Reputation: a clean window accrues trust to its participants
+        // — innocence accumulates over time, and ONLY shields ambiguous
+        // window attribution, never signature/scout/chain evidence.
+        if !det.anomaly && !ref_breach {
+            if let Some((ip, _)) = fv.top_src {
+                let e = self.rep.entry(ip).or_insert(0);
+                *e = (*e).saturating_add(1).min(5);
+            }
+        }
         if (det.anomaly && det.score >= self.policy.anomaly_threshold) || ref_breach {
             // Down-driven or stale-echo anomaly: this eval's input was
             // pure down-spike, OR no up-channel activity for 2+ evals
@@ -481,7 +498,11 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
             .unwrap_or(false);
         // No strikes during cold start — the baseline needs ~10 evals
         // before deviations mean anything; graduating earlier is noise.
-        if borderline && !down_driven2 && !chain_in_flight && self.sample_seq > 10 {
+        let trusted = fv
+            .top_src
+            .map(|(ip, _)| self.rep.get(&ip).copied().unwrap_or(0) >= 3)
+            .unwrap_or(false);
+        if borderline && !down_driven2 && !chain_in_flight && !trusted && self.sample_seq > 10 {
             let key = if let Some((ip, _)) = fv.top_src {
                 format!("ip:{ip}")
             } else {
@@ -562,10 +583,12 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
                     return Ok(false);
                 } else if let Some((ip, _)) = fv.top_src {
                     // No shape to scope by — ambiguous attribution.
-                    // Watch first: only a REPEAT top_src graduates to a
-                    // real Ip rule (60s window). A one-off dominant legit
-                    // source in a mixed window is never ruled.
-                    if !self.watch_graduate(ip, now_ms) {
+                    // Reputation shield: a source with accrued clean
+                    // history is watched, never ruled on co-presence.
+                    // Then watchlist: only a REPEAT top_src graduates.
+                    if self.rep.get(&ip).copied().unwrap_or(0) >= 3
+                        || !self.watch_graduate(ip, now_ms)
+                    {
                         return Ok(false);
                     }
                     RuleSubject::Ip(ip)

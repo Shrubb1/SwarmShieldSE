@@ -188,6 +188,20 @@ impl SourceProfiles {
         }
         flag.map(|(ip, _)| ip)
     }
+
+    /// Is `ip`'s OWN traffic anomalous right now — its current tick
+    /// count vs its learned baseline? The TNR guard: being present in a
+    /// bad window ≠ being the attacker; only self-deviation earns a rule.
+    pub fn anomalous(&self, ip: &IpAddr) -> bool {
+        let Some((cur, mean, var, cnt)) = self.map.get(ip) else {
+            return false;
+        };
+        if *cnt < 4 {
+            return false; // not enough history to know "their" normal
+        }
+        let sd = (*var / (*cnt - 1) as f32).max(0.0).sqrt().max(1.0);
+        (*cur as f32 - *mean) > self.z * sd
+    }
 }
 
 // ---------- 4. Meta channels ----------
