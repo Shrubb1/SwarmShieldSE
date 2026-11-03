@@ -62,7 +62,24 @@ fn scan(path: &Path) -> Option<String> {
     }
     let sig = snn_firewall::Signatures::scan(&buf);
     if sig != 0 {
-        return Some(format!("signature match (mask={sig})"));
+        // Context gate: a script signature inside an HTML file is the
+        // web working as designed — only flag when the sig lands in a
+        // file type it shouldn't be in (executables, scripts, packed
+        // blobs). Suspicious set; .html/.css/.svg etc. pass clean.
+        let ext = path
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        const SUSPECT: &[&str] = &[
+            "exe", "dll", "com", "scr", "bat", "cmd", "ps1", "vbs", "js",
+            "jse", "wsf", "jar", "apk", "msi", "hta", "pif", "gadget",
+            "pl", "py", "sh", "php", "elf", "so", "dylib",
+        ];
+        if SUSPECT.contains(&ext.as_str()) {
+            return Some(format!("signature match in {ext} (mask={sig})"));
+        }
+        // .html/.txt/etc. — a script sig is expected content, not a flag.
+        return None;
     }
     // Packed/encrypted: near-random bytes at the head.
     let mut freq = [0u32; 256];
