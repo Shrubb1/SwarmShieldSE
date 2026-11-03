@@ -160,32 +160,43 @@ fn check_link(url: &str) -> String {
     if url_l.contains('@') || url_l.matches('.').count() > 4 {
         flags.push("weird URL structure (deep subdomains or @ tricks)".to_string());
     }
-    // Header-only fetch — never the payload.
+    // Bounded fetch — download up to 5MB, scan the bytes in memory.
+    // "Open it" = read it; never execute. TLS still headers-only.
     let target = if url_l.starts_with("https://") { format!("{host}:443") } else { format!("{host}:80") };
     let is_https = url_l.starts_with("https://");
-    let fetch_note = if is_https {
-        flags.push("https — can't inspect headers without TLS (by design)".to_string());
-        "TLS-protected, not fetched".to_string()
+    let (fetch_note, mut payload_scan) = if is_https {
+        flags.push("https — can't inspect the payload without TLS".to_string());
+        ("TLS-protected, not fetched".to_string(), String::new())
     } else if let Ok(mut s) = std::net::TcpStream::connect(&target) {
-        let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(6)));
+        let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(8)));
         let path = url_l[url_l.find(host.as_str()).map(|i| i + host.len()).unwrap_or(0)..]
             .split(['?', '#'])
             .next()
             .unwrap_or("/")
             .to_string();
         let path = if path.is_empty() { "/".into() } else { path };
-        let _ = write!(s, "GET {path} HTTP/1.0\r\nHost: {host}\r\nRange: bytes=0-0\r\n\r\n");
-        let mut resp = String::new();
-        let _ = s.take(4096).read_to_string(&mut resp);
-        if let Some(code) = resp.split_whitespace().nth(1) {
-            format!("server answered HTTP {code}")
+        let _ = write!(s, "GET {path} HTTP/1.0\r\nHost: {host}\r\nRange: bytes=0-5242879\r\n\r\n");
+        let mut resp = Vec::new();
+        let _ = s.take(5 * 1024 * 1024 + 8192).read_to_end(&mut resp);
+        // Split headers/body — scan whatever bytes came back.
+        if let Some(pos) = resp.windows(4).position(|w| w == b"\r\n\r\n") {
+            let head = String::from_utf8_lossy(&resp[..pos]);
+            let code = head.split_whitespace().nth(1).unwrap_or("?");
+            let body = &resp[pos + 4..];
+            let scan = if !body.is_empty() {
+                scan_bytes(&format!("downloaded ({})", path), body)
+            } else {
+                String::new()
+            };
+            (format!("fetched {} bytes (HTTP {code})", body.len()), scan)
         } else {
-            "server answered".to_string()
+            ("server answered, no parseable response".to_string(), String::new())
         }
     } else {
         flags.push("host unreachable — dead or fake domain".to_string());
-        "unreachable".to_string()
+        ("unreachable".to_string(), String::new())
     };
+    let _ = &mut payload_scan;
     let verdict = if flags.is_empty() {
         "looks okay".to_string()
     } else {
@@ -202,7 +213,7 @@ fn check_link(url: &str) -> String {
         )
     };
     format!(
-        "<div class='card'><h3>{url}</h3><p>host: {host} · {fetch_note}</p><p>{verdict}</p>{cta}</div>"
+        "<div class='card'><h3>{url}</h3><p>host: {host} · {fetch_note}</p><p>{verdict}</p>{payload_scan}{cta}</div>"
     )
 }
 
