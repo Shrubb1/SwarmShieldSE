@@ -53,10 +53,15 @@ cargo build --release
 sqlmap -u "http://127.0.0.1:8081/?id=1" --batch   # watch it give up
 ```
 
-Tiers: **free** = single service, drop-only; **paid** (`--token` +
-`SWARM_LICENSE_URL`) = tarpit deception, multi-service, search+playbook,
-15-min herd-immunity sync (`ch{idx}=fix` — channel-anonymous, zero
-identifiers leave the machine).
+Tiers: **free** = full signature library + core detection;
+**paid** (`--token` + `SWARM_LICENSE_URL`) = SNN learning, tarpit,
+kill-chain prediction, fingerprints, herd immunity.
+
+Licensing is cryptographically real: the license server signs
+`token|expiry|machine-id` with Ed25519 — the client verifies the grant
+with the public key baked in. Tokens can't be forged or shared, and
+one build serves everyone: the free download IS the product — a
+signed token activates Pro.
 
 Replay a Wireshark/tcpdump capture through the engine:
 
