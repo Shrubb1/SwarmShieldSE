@@ -18,8 +18,10 @@ const DIM: [u8; 3] = [139, 148, 158]; // #8b949e
 const GREEN: [u8; 3] = [63, 185, 80]; // #3fb950
 
 fn service_running() -> bool {
+    use std::os::windows::process::CommandExt;
     std::process::Command::new("tasklist")
         .args(["/FO", "CSV", "/NH"])
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW — no console flash
         .output()
         .map(|o| {
             let s = String::from_utf8_lossy(&o.stdout);
