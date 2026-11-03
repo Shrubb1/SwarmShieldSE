@@ -14,8 +14,9 @@ const CACHE: &str = r"C:\ProgramData\SwarmShieldSE\known_safe.txt";
 const LOG: &str = r"C:\ProgramData\SwarmShieldSE\scan_log.txt";
 /// Read cap per file — enough for PE/script headers + signatures.
 const HEAD: usize = 96 * 1024;
-/// Pace: ms to sleep between files — background-friendly.
-const PACE_MS: u64 = 40;
+/// Pace: ms between files — fast enough to finish a drive, still
+/// background-friendly (won't starve other work).
+const PACE_MS: u64 = 6;
 
 /// Cheap local identity for the safe-cache — not crypto, just a
 /// "did we see these bytes before" key. path-independent so renames
@@ -81,22 +82,31 @@ fn scan(path: &Path) -> Option<String> {
         // .html/.txt/etc. — a script sig is expected content, not a flag.
         return None;
     }
-    // Packed/encrypted: near-random bytes at the head.
-    let mut freq = [0u32; 256];
-    for &b in &buf {
-        freq[b as usize] += 1;
-    }
-    let nn = n as f64;
-    let e: f64 = freq
-        .iter()
-        .filter(|&&c| c > 0)
-        .map(|&c| {
-            let p = c as f64 / nn;
-            -p * p.log2()
-        })
-        .sum();
-    if e > 7.8 && n > 4 * 1024 {
-        return Some(format!("packed/encrypted head (entropy {e:.1})"));
+    // Packed/encrypted flag — but ONLY outside system dirs. Signed
+    // Windows binaries (WinSxS, System32) legitimately pack to
+    // ~8.0 entropy — flagging them is pure noise. The signal lives in
+    // user space: Downloads, Temp, AppData, odd folders.
+    let p = path.to_string_lossy().to_lowercase();
+    if !(p.starts_with(r"c:\windows")
+        || p.starts_with(r"c:\program files")
+        || p.contains("winsxs"))
+    {
+        let mut freq = [0u32; 256];
+        for &b in &buf {
+            freq[b as usize] += 1;
+        }
+        let nn = n.max(1) as f64;
+        let e: f64 = freq
+            .iter()
+            .filter(|&&c| c > 0)
+            .map(|&c| {
+                let p = c as f64 / nn;
+                -p * p.log2()
+            })
+            .sum();
+        if e > 7.8 && n > 4 * 1024 {
+            return Some(format!("packed/encrypted head (entropy {e:.1})"));
+        }
     }
     None
 }
