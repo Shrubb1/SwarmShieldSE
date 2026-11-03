@@ -126,6 +126,24 @@ fn handle(
                         }
                     }
                     _ => {
+                        // Live feed — every blocked event lands in the
+                        // log for real-time watching (what got checked,
+                        // what got caught, why).
+                        let ts = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0);
+                        if let Ok(mut f) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open("svc_feed.log")
+                        {
+                            let _ = writeln!(
+                                f,
+                                "[{ts}] BLOCKED {} → tarpitted ({:?})",
+                                ev.src_ip, v
+                            );
+                        }
                         tarpit(&mut client);
                         return;
                     }
