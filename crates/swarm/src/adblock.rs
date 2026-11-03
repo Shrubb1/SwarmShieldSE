@@ -28,6 +28,26 @@ pub const AD_DOMAINS: &[&str] = &[
     "ads.api.snapchat.com", "ads.youtube.com",
 ];
 
+/// Known-real infra that collides with the DGA/entropy heuristics —
+/// CDN names that LOOK hash-y but are legit. Checked BEFORE the
+/// shape checks so Discord/media/gaming infra survives.
+pub const SAFE_SUFFIXES: &[&str] = &[
+    "discord.media", "discord.com", "discord.gg", "discordapp.com",
+    "discordapp.net", "discord.dev", "dis.gd",
+    // Common CDN/infra that uses encoded host names
+    "akamaiedge.net", "akamai.net", "edgesuite.net", "edgekey.net",
+    "fastly.net", "cloudfront.net", "azureedge.net", "cdn77.org",
+];
+
+/// Is `host` on the safe-infra list (exact or suffix)?
+pub fn is_safe(host: &str) -> bool {
+    let h = host.trim().to_lowercase();
+    let h = h.trim_end_matches('.');
+    SAFE_SUFFIXES
+        .iter()
+        .any(|d| h == *d || h.ends_with(&format!(".{d}")))
+}
+
 /// Is `host` an ad/tracker domain (exact or subdomain suffix match,
 /// plus a heuristic tail for ad-shaped hosts not in the list)?
 pub fn is_ad(host: &str) -> bool {

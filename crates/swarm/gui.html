@@ -47,6 +47,9 @@
     <input id="tok" placeholder="SS-SE-XXXX-XXXX (activation token)">
     <button id="act">Activate Pro</button>
   </div>
+  <div class="row" style="margin-top:10px">
+    <button id="scan" style="flex:1;background:#21262d;border:1px solid #30363d;color:#8b949e;padding:11px;border-radius:9px;font-size:12.5px;cursor:pointer">Run a scan now (Pro)</button>
+  </div>
 <script>
   const st=document.getElementById('st'), tog=document.getElementById('tog'),
         feed=document.getElementById('feed');
@@ -57,6 +60,7 @@
     tog.textContent='Protection: '+(on?'ON':'OFF');
     if(txt)feed.innerHTML=txt;
   };
+  document.getElementById('scan').onclick=()=>ipc.postMessage(JSON.stringify({cmd:'scan'}));
   tog.onclick=()=>ipc.postMessage(JSON.stringify({cmd:'toggle'}));
   document.getElementById('act').onclick=()=>{
     ipc.postMessage(JSON.stringify({cmd:'activate',token:tok.value.trim()}));

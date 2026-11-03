@@ -44,6 +44,11 @@ fn flag(name: &str) -> Option<String> {
     if swarm::adblock::is_ad(&low) {
         return Some(format!("ad/tracker domain '{low}'"));
     }
+    // Known-real infra — Discord/CDN hash-y names pass clean, the
+    // DGA/entropy checks below don't run on them.
+    if swarm::adblock::is_safe(&low) {
+        return None;
+    }
     let labels: Vec<&str> = low.split('.').collect();
     let longest = labels.iter().map(|l| l.len()).max().unwrap_or(0);
     if longest > 40 {

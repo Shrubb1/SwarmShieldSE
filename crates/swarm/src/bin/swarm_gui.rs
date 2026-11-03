@@ -125,6 +125,16 @@ fn main() {
                             .creation_flags(NO_WINDOW)
                             .status();
                     }
+                    Some("scan") => {
+                        // Pro-gated: only run on-demand if a signed
+                        // grant cache exists. Free tier = weekly auto.
+                        let pro = std::env::var("USERPROFILE")
+                            .map(|p| std::path::Path::new(&format!("{p}\\.swarmshield-license")).exists())
+                            .unwrap_or(false);
+                        if pro && !proc_running("swarm_scanner.exe") {
+                            spawn_no_console("swarm_scanner.exe", &[r"C:\Users"]);
+                        }
+                    }
                     Some("activate") => {
                         let tok = v.get("token").and_then(|t| t.as_str()).unwrap_or("");
                         if !tok.is_empty() {
