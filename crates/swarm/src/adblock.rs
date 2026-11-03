@@ -37,6 +37,13 @@ pub const SAFE_SUFFIXES: &[&str] = &[
     // Common CDN/infra that uses encoded host names
     "akamaiedge.net", "akamai.net", "edgesuite.net", "edgekey.net",
     "fastly.net", "cloudfront.net", "azureedge.net", "cdn77.org",
+    // Gaming platforms — Steam, Epic, etc.
+    "steampowered.com", "steamcontent.com", "steamstatic.com",
+    "steamcommunity.com", "steam-chat.com", "steamserver.net",
+    "epicgames.com", "epicgames.dev", "unrealengine.com",
+    "riotgames.com", "blizzard.com", "battle.net", "gog.com",
+    "ea.com", "origin.com", "xbox.com", "xboxlive.com",
+    "playstation.net", "nintendo.com", "ubisoft.com",
 ];
 
 /// Is `host` on the safe-infra list (exact or suffix)?
