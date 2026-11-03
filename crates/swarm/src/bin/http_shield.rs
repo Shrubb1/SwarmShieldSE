@@ -78,7 +78,17 @@ fn handle(s: &mut TcpStream, fw: &mut Firewall<RecordingPolicySink, MemoryAudit>
         if method == 0 {
             let mut parts = t.split_whitespace();
             method = method_id(parts.next().unwrap_or(""));
-            path_len = parts.next().map(|p| p.len()).unwrap_or(0) as u16;
+            let path = parts.next().unwrap_or("");
+            path_len = path.len() as u16;
+            // Ad endpoints — path-level block catches same-domain
+            // ad calls the DNS layer can't separate.
+            if swarm::adblock::is_ad_path(path) {
+                let _ = s.write_all(
+                    b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                );
+                eprintln!("[shield] ad-blocked path={path}");
+                return;
+            }
         }
         // Proxied deployments: the socket IP is the load balancer — the
         // real client rides in forwarding headers (leftmost entry).

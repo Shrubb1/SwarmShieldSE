@@ -28,11 +28,41 @@ pub const AD_DOMAINS: &[&str] = &[
     "ads.api.snapchat.com", "ads.youtube.com",
 ];
 
-/// Is `host` an ad/tracker domain (exact or subdomain suffix match)?
+/// Is `host` an ad/tracker domain (exact or subdomain suffix match,
+/// plus a heuristic tail for ad-shaped hosts not in the list)?
 pub fn is_ad(host: &str) -> bool {
     let h = host.trim().to_lowercase();
     let h = h.trim_end_matches('.');
-    AD_DOMAINS
+    if AD_DOMAINS
         .iter()
         .any(|d| h == *d || h.ends_with(&format!(".{d}")))
+    {
+        return true;
+    }
+    // Heuristic — ad-shaped hostnames not on the list (ads.*,
+    // adserver.*, tracking.*, telemetry.*, telemetry-like subdomains).
+    for l in h.split('.') {
+        if matches!(
+            l,
+            "ads" | "adserver" | "adnxs" | "tracking" | "tracker" | "telemetry"
+                | "admetric" | "beacon" | "advert" | "advertising"
+        ) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Is a request path an ad endpoint? (used at the HTTP layer —
+/// catches /pagead, /adview, ad-serving paths same-domain DNS can't)
+pub fn is_ad_path(path: &str) -> bool {
+    let p = path.to_lowercase();
+    const PATS: &[&str] = &[
+        "/pagead/", "/pagead/", "/ads/", "/adview", "/adserver/",
+        "/advert", "/sponsor", "/sponsored/", "/tracking/",
+        "/api/stats/ads", "/get_midroll", "/ptracking", "/banner",
+        "/doubleclick/", "/adsafeprotected/", "/yieldmanager/",
+        "/googlesyndication", "/an/lookup", "/adframe",
+    ];
+    PATS.iter().any(|pat| p.contains(pat))
 }
