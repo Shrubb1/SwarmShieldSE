@@ -13,3 +13,8 @@ snn-io = { path = "../snn-io" }
 
 [dev-dependencies]
 snn-encode = { path = "../snn-encode" }
+
+[features]
+# Kernel capture seam — compiles the real WinDivertSource::poll when
+# the driver + windivert crate are present on the deployment machine.
+windivert = []

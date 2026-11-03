@@ -47,7 +47,8 @@ impl EventSource for WinDivertSource {
         #[cfg(feature = "windivert")]
         {
             if self.queue.is_empty() {
-                self.queue.extend(self.poll());
+                let evs = self.poll();
+                self.queue.extend(evs);
             }
         }
         self.queue.pop_front()

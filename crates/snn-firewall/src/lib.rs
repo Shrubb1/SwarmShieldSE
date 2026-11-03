@@ -28,8 +28,10 @@ pub use scout::{Persistence, Scout};
 pub use enhance::PcapSource;
 pub mod identity;
 pub mod sequence;
+pub mod windivert_src;
 pub use identity::IdentityMap;
 pub use sequence::SequenceTracker;
+pub use windivert_src::WinDivertSource;
 
 pub use enhance::{
     Beacons, EventSource, JsonlSource, MetaWindow, Signatures, SlowTick, SourceProfiles,
