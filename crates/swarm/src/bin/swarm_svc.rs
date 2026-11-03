@@ -133,10 +133,14 @@ fn handle(
                             .duration_since(UNIX_EPOCH)
                             .map(|d| d.as_secs())
                             .unwrap_or(0);
+                        // Services run with cwd=System32 — write to a
+                        // real location users can actually watch.
+                        let dir = std::path::Path::new(r"C:\ProgramData\SwarmShieldSE");
+                        let _ = std::fs::create_dir_all(dir);
                         if let Ok(mut f) = std::fs::OpenOptions::new()
                             .create(true)
                             .append(true)
-                            .open("svc_feed.log")
+                            .open(dir.join("svc_feed.log"))
                         {
                             let _ = writeln!(
                                 f,
