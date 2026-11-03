@@ -89,6 +89,16 @@ fn handle(s: &mut TcpStream, fw: &mut Firewall<RecordingPolicySink, MemoryAudit>
             }
         }
     }
+    // Tier-1 smuggling/charset gate — the attacks that beat real WAFs:
+    // TE.CL/CL.TE conflicts, duplicate Content-Length, UTF-7/overlong
+    // encodings, JSON key pollution. Hard-deny before the event even
+    // reaches the engine — parsers disagreeing IS the attack.
+    let smug = snn_firewall::Signatures::scan_smuggling(&String::from_utf8_lossy(&raw));
+    if smug != 0 {
+        let _ = s.set_write_timeout(Some(std::time::Duration::from_secs(2)));
+        let _ = s.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        return;
+    }
     let src = fwd_for
         .as_deref()
         .and_then(|f| f.parse().ok())

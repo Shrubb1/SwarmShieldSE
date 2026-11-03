@@ -18,15 +18,17 @@ tier ships with a regression corpus entry so it can never re-open.
 
 ## Tier 1 — attacks that beat real WAFs
 
-| attack | why it beats sigs today | counter |
-|---|---|---|
-| HTTP request smuggling (TE.CL/CL.TE) | two parsers disagree on body length | strict Content-Length/Transfer-Encoding conflict rules + desync harness test |
-| Charset/Unicode confusion | UTF-7/overlong encodings bypass decoders | byte-level scanning + overlong-UTF8 rejection |
-| JSON/parameter pollution | `{"a":["safe","sqli"]}` smuggles past | structural parse + per-value scan |
-| DNS/ICMP exfil | off-TCP channel the gateway can't see | doc'd scope: add a UDP/DNS EventSource |
-| Domain fronting / TLS cover | legit CDN hostname hides C2 | ja3 fingerprint + cert-chain meta |
-| Slowloris / slow-drip DoS | per-byte rate ~normal | conn-hold duration channel |
-| Distributed ultra-low-rate scan | one event/IP/day — below every rate channel | cross-IP shared-shape correlation |
+- [x] **HTTP request smuggling** — `scan_smuggling`: TE.CL/CL.TE
+      conflict, duplicate Content-Length; `http_shield` 400s on sight
+- [x] **Charset/Unicode confusion** — UTF-7/UTF-16 markers, overlong
+      `%c0%ae`, raw C0/C1 lead bytes
+- [x] **JSON key pollution** — duplicate-key objects flagged
+- [x] **Slowloris / slow-drip** — `mean_gap_ms` channel; tiny rate +
+      long holds → `Ip` rule
+- [x] **Distributed low-rate scan** — `by_shape` correlation: 4+ srcs
+      sharing one request shape → `Pattern` rule
+- [ ] DNS/ICMP exfil — needs a UDP `EventSource` (scope doc'd)
+- [ ] Domain fronting — ja3 + cert-chain meta (partial via fingerprints)
 
 ## Tier 2 — the learning roadmap
 

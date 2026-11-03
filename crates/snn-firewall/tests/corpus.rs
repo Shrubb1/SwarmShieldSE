@@ -60,3 +60,37 @@ fn corpus_known_gaps_track_frontier() {
         );
     }
 }
+
+/// Smuggling/charset bypasses — `scan_smuggling` must catch these.
+#[test]
+fn corpus_smuggling_stay_dead() {
+    // TE.CL: Content-Length + Transfer-Encoding together
+    assert_ne!(
+        Signatures::scan_smuggling(
+            "POST /x HTTP/1.1\r\nContent-Length: 4\r\nTransfer-Encoding: chunked\r\n\r\n"
+        ),
+        0
+    );
+    // Conflicting duplicate Content-Length
+    assert_ne!(
+        Signatures::scan_smuggling(
+            "POST /x HTTP/1.1\r\nContent-Length: 4\r\nContent-Length: 99\r\n\r\n"
+        ),
+        0
+    );
+    // UTF-7 charset confusion
+    assert_ne!(
+        Signatures::scan_smuggling("GET /x HTTP/1.1\r\nContent-Type: text/plain; charset=utf-7\r\n\r\n"),
+        0
+    );
+    // Overlong encoding marker
+    assert_ne!(
+        Signatures::scan_smuggling("GET /%c0%ae/etc/passwd HTTP/1.1\r\n\r\n"),
+        0
+    );
+    // JSON duplicate-key pollution
+    assert_ne!(
+        Signatures::scan_smuggling(r#"{"a":1,"a":2}"#),
+        0
+    );
+}

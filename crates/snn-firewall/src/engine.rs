@@ -431,6 +431,32 @@ impl<P: PolicySink, A: AuditLog> Firewall<P, A> {
             return self.remediate(fv, &det, ev);
         }
 
+        // Distributed scan: 4+ distinct srcs sharing one request shape —
+        // the fingerprint every per-IP rate channel misses entirely.
+        let shared_srcs = self.meta_win.shared_shape_srcs();
+        if shared_srcs >= 4 && (ev.meta.method == 0 || ev.meta.path_len == 0 || ev.meta.dst_port > 0) {
+            return self.emit(
+                RuleSubject::Pattern(ShapePattern {
+                    method: ev.meta.method,
+                    proto: ev.meta.proto,
+                    dst_port: ev.meta.dst_port,
+                    max_path_len: ev.meta.path_len,
+                }),
+                format!("distributed scan — {shared_srcs} srcs, one shape"),
+                ev.ts_ms,
+            );
+        }
+        // Slow-drip (slowloris): tiny rate + very long inter-arrivals.
+        if fv.mean_gap_ms > 8_000.0 && fv.values.first().copied().unwrap_or(0.0) < 1.0 {
+            if let Some((ip, _)) = fv.top_src {
+                return self.emit(
+                    RuleSubject::Ip(ip),
+                    "slow-drip connection hold".to_string(),
+                    ev.ts_ms,
+                );
+            }
+        }
+
         // ── persistence-strikes + joint correlation (TPR frontier) ──
         // A borderline eval — detector anomalous but under the firewall
         // threshold, OR many channels mildly deviant TOGETHER — doesn't

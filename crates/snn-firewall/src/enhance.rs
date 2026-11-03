@@ -199,6 +199,10 @@ pub struct MetaWindow {
     ports: HashMap<u16, u32>,
     uas: std::collections::HashSet<u16>,
     ja3s: std::collections::HashSet<u32>,
+    /// Distributed-scan correlation: distinct srcs sharing one request
+    /// shape (port, method, path-len). One event per IP per day stays
+    /// invisible to every rate channel — the shared shape doesn't.
+    by_shape: HashMap<(u16, u8, u16), std::collections::HashSet<IpAddr>>,
     errors: u32,
     tcp: u32,
     verbs: u32,
@@ -240,6 +244,21 @@ impl MetaWindow {
             }
         }
         *self.ports.entry(ev.meta.dst_port).or_insert(0) += 1;
+        self.by_shape
+            .entry((ev.meta.dst_port, ev.meta.method, ev.meta.path_len))
+            .or_default()
+            .insert(ev.src_ip);
+    }
+
+    /// Max distinct sources sharing any one request shape — a
+    /// distributed scan's fingerprint. Legit traffic fans out; a
+    /// coordinated scan converges on identical shape.
+    pub fn shared_shape_srcs(&self) -> usize {
+        self.by_shape
+            .values()
+            .map(|s| s.len())
+            .max()
+            .unwrap_or(0)
     }
 
     /// Channels 7–15 — all ×100 so the shared delta threshold fires.
@@ -331,6 +350,61 @@ impl Signatures {
                 _ => c,
             })
             .collect()
+    }
+
+    /// Request-smuggling + charset-confusion detection on raw headers.
+    /// These are the attacks that beat real WAFs — two parsers disagree
+    /// on where the body starts, or an odd encoding smuggles bytes past.
+    /// Returns a bitmask: 512 smuggling, 1024 charset, 2048 json-pollution.
+    pub fn scan_smuggling(raw_headers: &str) -> u16 {
+        let h = raw_headers.to_lowercase();
+        let mut hits = 0u16;
+        let cl = h.matches("content-length:").count();
+        let te_chunked = h.contains("transfer-encoding:") && h.contains("chunked");
+        // TE.CL / CL.TE: both present → parsers disagree on body bounds.
+        if cl > 0 && te_chunked {
+            hits |= 512;
+        }
+        // Conflicting duplicate Content-Length (a CL.CL smuggle variant).
+        if cl > 1 {
+            let mut vals = std::collections::HashSet::new();
+            for line in h.lines() {
+                if let Some(v) = line.trim().strip_prefix("content-length:") {
+                    vals.insert(v.trim().to_string());
+                }
+            }
+            if vals.len() > 1 {
+                hits |= 512;
+            }
+        }
+        // Charset confusion: utf-7 marker, utf-16le, overlong %c0%ae,
+        // raw C0/C1 lead bytes that decode past UTF-8 validators.
+        if h.contains("charset=utf-7")
+            || h.contains("charset=utf-16")
+            || h.contains("%c0%ae")
+            || h.contains("%e0%80%ae")
+            || raw_headers.bytes().any(|b| b == 0xc0 || b == 0xc1)
+        {
+            hits |= 1024;
+        }
+        // JSON pollution: same key twice in one object body fragment.
+        if h.contains('{') {
+            let mut keys = std::collections::HashMap::new();
+            for (i, c) in h.char_indices() {
+                if c != '"' {
+                    continue;
+                }
+                if let Some(k) = h[i + 1..].split('"').next() {
+                    if !k.is_empty() && k.len() < 40 && h[i + 1 + k.len()..].starts_with("\":") {
+                        *keys.entry(k.to_string()).or_insert(0u8) += 1;
+                    }
+                }
+            }
+            if keys.values().any(|&c| c > 1) {
+                hits |= 2048;
+            }
+        }
+        hits
     }
 
     /// Defeats the classic evasions: strip `/* */` comments, %-decode,

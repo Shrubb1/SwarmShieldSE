@@ -80,6 +80,9 @@ pub struct FeatureVector {
     /// Inter-arrival stdev — appended LAST in the metric vector so the
     /// existing baseline positions stay stable across channel growth.
     pub jitter: f32,
+    /// Mean inter-arrival gap — slow-drip detection (slowloris holds
+    /// connections with rare, tiny sends → very long mean gaps).
+    pub mean_gap_ms: f32,
 }
 
 #[derive(Default)]
@@ -181,6 +184,11 @@ impl FeatureWindow {
                 agg.new_srcs as f32 / secs,
             ],
             top_src,
+            mean_gap_ms: if agg.gap_n > 0 {
+                (agg.gap_sum / agg.gap_n as f64) as f32
+            } else {
+                0.0
+            },
             jitter: if agg.gap_n > 1 {
                 let n = agg.gap_n as f64;
                 let mean = agg.gap_sum / n;
