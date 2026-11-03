@@ -50,9 +50,17 @@ fn main() {
 
     let el: EventLoop<()> = EventLoop::new();
     let proxy = el.create_proxy();
+    // Window/taskbar icon — the tight square shield as RGBA.
+    let png = image::load_from_memory(include_bytes!("../../../../site/assets/logo_sq.png"))
+        .unwrap()
+        .to_rgba8();
+    let (iw, ih) = png.dimensions();
+    let win_icon = tao::window::Icon::from_rgba(png.into_raw(), iw, ih).ok();
+
     let window = WindowBuilder::new()
         .with_title("SwarmShieldSE")
         .with_inner_size(tao::dpi::LogicalSize::new(680.0, 560.0))
+        .with_window_icon(win_icon)
         .build(&el)
         .unwrap();
 

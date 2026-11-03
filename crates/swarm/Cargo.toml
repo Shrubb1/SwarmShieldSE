@@ -16,6 +16,7 @@ ed25519-dalek = { version = "2", features = ["rand_core"] }
 native-windows-gui = "1.0.13"
 wry = "0.57.1"
 tao = "0.37.2"
+image = "0.25.10"
 
 [[bin]]
 name = "swarm-worker"
