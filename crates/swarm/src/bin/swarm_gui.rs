@@ -48,6 +48,7 @@ fn main() {
         .text("SwarmShieldSE — behavioral firewall")
         .position((18, 14))
         .size((560, 22))
+        .parent(&window)
         .build(&mut title)
         .unwrap();
 
@@ -55,6 +56,7 @@ fn main() {
         .text("status: checking…")
         .position((18, 42))
         .size((560, 22))
+        .parent(&window)
         .build(&mut status)
         .unwrap();
 
@@ -62,6 +64,7 @@ fn main() {
         .position((18, 74))
         .size((564, 320))
         .collection(vec!["loading…".to_string()])
+        .parent(&window)
         .build(&mut feed)
         .unwrap();
 
@@ -71,6 +74,7 @@ fn main() {
         .text("Turn protection OFF")
         .position((18, 404))
         .size((200, 40))
+        .parent(&window)
         .build(&mut toggle)
         .unwrap();
 
@@ -80,12 +84,14 @@ fn main() {
         .position((236, 404))
         .size((240, 32))
         .placeholder_text(Some("SS-SE-XXXX-XXXX (activation token)"))
+        .parent(&window)
         .build(&mut tok_box)
         .unwrap();
     nwg::Button::builder()
         .text("Activate Pro")
         .position((484, 404))
         .size((98, 36))
+        .parent(&window)
         .build(&mut btn_start)
         .unwrap();
     let _ = &mut btn_stop;
