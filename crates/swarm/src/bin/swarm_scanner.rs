@@ -87,9 +87,25 @@ fn scan(path: &Path) -> Option<String> {
     // ~8.0 entropy — flagging them is pure noise. The signal lives in
     // user space: Downloads, Temp, AppData, odd folders.
     let p = path.to_string_lossy().to_lowercase();
+    // Compressed media/archives are ~8.0 entropy by DESIGN — PNG,
+    // JPEG, ZIP, MP4 etc. always look "packed." The entropy signal
+    // only belongs on binary/executable/unknown types where packed
+    // content is actually suspicious.
+    let ext = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    const COMPRESSED: &[&str] = &[
+        "png", "jpg", "jpeg", "gif", "bmp", "webp", "ico", "svg",
+        "zip", "rar", "7z", "gz", "bz2", "xz", "tar", "iso",
+        "mp4", "mkv", "avi", "mov", "wmv", "webm", "mp3", "wav",
+        "flac", "ogg", "pdf", "docx", "xlsx", "pptx", "woff", "woff2",
+        "ttf", "otf", "eot", "pak", "vpk", "wem", "bnk", "dds",
+    ];
     if !(p.starts_with(r"c:\windows")
         || p.starts_with(r"c:\program files")
         || p.contains("winsxs"))
+        && !COMPRESSED.contains(&ext.as_str())
     {
         let mut freq = [0u32; 256];
         for &b in &buf {
