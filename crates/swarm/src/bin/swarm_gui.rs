@@ -33,35 +33,28 @@ fn service_running() -> bool {
         .unwrap_or(false)
 }
 
-fn feed_lines() -> Vec<String> {
-    // Merge every log source — blocks, scanner, watcher, ads — so the
-    // app shows everything happening live, most recent last.
-    let mut all: Vec<String> = Vec::new();
-    for f in [
-        FEED,
-        r"C:\ProgramData\SwarmShieldSE\scan_log.txt",
-        r"C:\ProgramData\SwarmShieldSE\watcher_log.txt",
-        r"C:\ProgramData\SwarmShieldSE\ads_log.txt",
-    ] {
-        if let Ok(s) = std::fs::read_to_string(f) {
-            let label = match f {
-                x if x.contains("scan_log") => "[scan]",
-                x if x.contains("watcher") => "[watch]",
-                x if x.contains("ads") => "[ad-block]",
-                _ => "[block]",
-            };
-            for l in s.lines().rev().take(6) {
-                all.push(format!("{label} {l}"));
-            }
-        }
-    }
-    if all.is_empty() {
-        vec!["feed is quiet — nothing blocked yet".into()]
+/// Last N lines of a log file, newest last.
+fn tail(path: &str, n: usize) -> String {
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|s| {
+            let v: Vec<&str> = s.lines().collect();
+            v.iter().rev().take(n).rev().cloned().collect::<Vec<_>>().join("<br>")
+        })
+        .unwrap_or_default()
+}
+
+/// The three feeds — live blocks, ad-blocks, file-scan activity.
+fn feeds() -> (String, String, String) {
+    let blocks = tail(FEED, 12);
+    let ads = tail(r"C:\ProgramData\SwarmShieldSE\ads_log.txt", 12);
+    let scan = tail(r"C:\ProgramData\SwarmShieldSE\scan_log.txt", 12);
+    let scan = if scan.is_empty() {
+        tail(r"C:\ProgramData\SwarmShieldSE\watcher_log.txt", 8)
     } else {
-        all.reverse();
-        all.truncate(20);
-        all
-    }
+        scan
+    };
+    (blocks, ads, scan)
 }
 
 const HTML: &str = include_str!("../../gui.html");
@@ -194,12 +187,9 @@ fn main() {
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => *cf = ControlFlow::Exit,
             Event::UserEvent(()) => {
                 let on = service_running();
-                let feed = feed_lines().join("<br>");
-                let js = format!(
-                    "upd({}, `{}`)",
-                    on,
-                    feed.replace('\\', "\\\\").replace('`', "\\`")
-                );
+                let (b, a, s) = feeds();
+                let esc = |x: &str| x.replace('\\', "\\\\").replace('`', "\\`").replace('\n', " ");
+                let js = format!("upd({}, `{}`, `{}`, `{}`)", on, esc(&b), esc(&a), esc(&s));
                 let _ = wv.evaluate_script(&js);
             }
             _ => {}

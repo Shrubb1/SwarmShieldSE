@@ -15,9 +15,10 @@
   .status.on{border-color:#238636;color:#3fb950}
   .status.off{border-color:#f85149;color:#f85149}
   .ft{font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:1px;margin:12px 0 6px}
-  #feed{flex:1;background:#161b22;border:1px solid #30363d;border-radius:9px;
-        padding:12px 14px;font-size:12.5px;color:#8b949e;overflow-y:auto;line-height:1.9}
-  #feed .hit{color:#f85149}
+  .fbox{background:#161b22;border:1px solid #30363d;border-radius:9px;
+        padding:10px 14px;font-size:12px;color:#8b949e;overflow-y:auto;
+        line-height:1.75;min-height:78px;max-height:120px}
+  .fbox .hit{color:#f85149}
   .row{display:flex;gap:12px;margin-top:18px}
   #tog{background:#238636;border:0;color:#fff;font-weight:600;font-size:14px;
        padding:13px 22px;border-radius:9px;cursor:pointer;min-width:170px}
@@ -40,8 +41,12 @@
     </div>
   </div>
   <div class="status" id="st">checking…</div>
-  <div class="ft">blocked-event feed</div>
-  <div id="feed">feed is quiet — nothing blocked yet</div>
+  <div class="ft">live blocks</div>
+  <div id="feed" class="fbox">quiet — nothing blocked</div>
+  <div class="ft">ad-blocks</div>
+  <div id="ads" class="fbox">quiet — no ads blocked yet</div>
+  <div class="ft">file scan</div>
+  <div id="scan" class="fbox">quiet — scanning files…</div>
   <div class="row">
     <button id="tog">Protection: ON</button>
     <input id="tok" placeholder="SS-SE-XXXX-XXXX (activation token)">
@@ -53,12 +58,14 @@
 <script>
   const st=document.getElementById('st'), tog=document.getElementById('tog'),
         feed=document.getElementById('feed');
-  window.upd=function(on,txt){
+  window.upd=function(on,txt,ads,scan){
     st.className='status '+(on?'on':'off');
     st.textContent=on?'●  PROTECTED — the guard is watching':'○  not running — flip the switch';
     tog.className=on?'':'off';
     tog.textContent='Protection: '+(on?'ON':'OFF');
     if(txt)feed.innerHTML=txt;
+    if(ads)document.getElementById('ads').innerHTML=ads;
+    if(scan)document.getElementById('scan').innerHTML=scan;
   };
   document.getElementById('scan').onclick=()=>ipc.postMessage(JSON.stringify({cmd:'scan'}));
   tog.onclick=()=>ipc.postMessage(JSON.stringify({cmd:'toggle'}));
