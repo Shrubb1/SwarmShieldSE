@@ -125,14 +125,28 @@ fn main() {
     let mut new_safe = 0u64;
 
     for root in &roots {
-        for entry in walkdir(root) {
-            walked += 1;
-            if let Ok(meta) = entry.metadata() {
-                if !meta.is_file() || meta.len() == 0 {
+        // Stream the walk — scan inline, don't hold every path in RAM.
+        let mut stack = vec![std::path::PathBuf::from(root)];
+        while let Some(dir) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+            for e in rd.flatten() {
+                let entry = e.path();
+                if entry.is_dir() {
+                    stack.push(entry);
                     continue;
                 }
-                // Don't churn the cache file itself or huge blobs.
-                if meta.len() > 256 * 1024 * 1024 {
+                walked += 1;
+                let p = entry.to_string_lossy().to_lowercase();
+                // Skip system dirs entirely — signed Windows files are
+                // expected-weird, always noise. Scan user space only.
+                if p.starts_with(r"c:\windows")
+                    || p.starts_with(r"c:\program files")
+                    || p.contains("winsxs")
+                {
+                    continue;
+                }
+                let Ok(meta) = entry.metadata() else { continue };
+                if !meta.is_file() || meta.len() == 0 || meta.len() > 256 * 1024 * 1024 {
                     continue;
                 }
                 let mut buf = Vec::new();
@@ -147,7 +161,7 @@ fn main() {
                 }
                 let key = file_key(&entry, &buf, meta.len());
                 if cache.contains(&key) {
-                    continue; // known clean — never re-scanned
+                    continue;
                 }
                 match scan(&entry) {
                     Some(why) => {
