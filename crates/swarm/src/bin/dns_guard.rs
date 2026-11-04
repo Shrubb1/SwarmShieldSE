@@ -101,6 +101,20 @@ fn main() {
         match qname(pkt).and_then(|q| flag(&q).map(|why| (q, why))) {
             Some((name, why)) => {
                 eprintln!("[BLOCK] {src} asked for {name} — {why}");
+                // Log to the feed file — the app merges this into the
+                // live view so ad-blocks are visible to the user.
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(r"C:\ProgramData\SwarmShieldSE\ads_log.txt")
+                {
+                    use std::io::Write;
+                    let ts = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    let _ = writeln!(f, "[{ts}] AD-BLOCKED {name} — {why}");
+                }
                 // NXDOMAIN-ish reply: copy header, set RCODE=3, zero answers.
                 let mut resp = pkt.to_vec();
                 if resp.len() >= 4 {

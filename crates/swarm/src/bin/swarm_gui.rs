@@ -34,11 +34,34 @@ fn service_running() -> bool {
 }
 
 fn feed_lines() -> Vec<String> {
-    std::fs::read_to_string(FEED)
-        .ok()
-        .map(|s| s.lines().map(|l| l.to_string()).collect::<Vec<_>>())
-        .filter(|v| !v.is_empty())
-        .unwrap_or_default()
+    // Merge every log source — blocks, scanner, watcher, ads — so the
+    // app shows everything happening live, most recent last.
+    let mut all: Vec<String> = Vec::new();
+    for f in [
+        FEED,
+        r"C:\ProgramData\SwarmShieldSE\scan_log.txt",
+        r"C:\ProgramData\SwarmShieldSE\watcher_log.txt",
+        r"C:\ProgramData\SwarmShieldSE\ads_log.txt",
+    ] {
+        if let Ok(s) = std::fs::read_to_string(f) {
+            let label = match f {
+                x if x.contains("scan_log") => "[scan]",
+                x if x.contains("watcher") => "[watch]",
+                x if x.contains("ads") => "[ad-block]",
+                _ => "[block]",
+            };
+            for l in s.lines().rev().take(6) {
+                all.push(format!("{label} {l}"));
+            }
+        }
+    }
+    if all.is_empty() {
+        vec!["feed is quiet — nothing blocked yet".into()]
+    } else {
+        all.reverse();
+        all.truncate(20);
+        all
+    }
 }
 
 const HTML: &str = include_str!("../../gui.html");
