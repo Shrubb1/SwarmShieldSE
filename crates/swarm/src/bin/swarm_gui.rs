@@ -22,13 +22,16 @@ const FEED: &str = r"C:\ProgramData\SwarmShieldSE\svc_feed.log";
 const NO_WINDOW: u32 = 0x08000000;
 
 fn service_running() -> bool {
-    std::process::Command::new("tasklist")
-        .args(["/FO", "CSV", "/NH"])
+    // The SERVICE state, not just the process — during stop the
+    // process lingers (STOP_PENDING) so tasklist lies. `sc query`
+    // gives the real state the button should show.
+    std::process::Command::new("sc")
+        .args(["query", "SwarmShieldSE"])
         .creation_flags(NO_WINDOW)
         .output()
         .map(|o| {
             let s = String::from_utf8_lossy(&o.stdout);
-            s.contains("swarm_svc.exe") || s.contains("swarmshield.exe")
+            s.contains("STATE") && s.contains("RUNNING")
         })
         .unwrap_or(false)
 }
