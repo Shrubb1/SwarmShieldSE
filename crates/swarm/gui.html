@@ -68,7 +68,11 @@
     if(scan)document.getElementById('scan').innerHTML=scan;
   };
   document.getElementById('scan').onclick=()=>ipc.postMessage(JSON.stringify({cmd:'scan'}));
-  tog.onclick=()=>ipc.postMessage(JSON.stringify({cmd:'toggle'}));
+  tog.onclick=()=>{
+    tog.textContent='working…';
+    st.textContent='●  working — flipping protection';
+    ipc.postMessage(JSON.stringify({cmd:'toggle'}));
+  };
   document.getElementById('act').onclick=()=>{
     ipc.postMessage(JSON.stringify({cmd:'activate',token:tok.value.trim()}));
   };
