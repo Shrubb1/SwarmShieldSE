@@ -158,6 +158,7 @@ fn main() {
                 if p.starts_with(r"c:\windows")
                     || p.starts_with(r"c:\program files")
                     || p.contains("winsxs")
+                    || p.contains(r"\node_modules\")
                 {
                     continue;
                 }
